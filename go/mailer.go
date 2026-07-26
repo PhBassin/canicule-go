@@ -27,14 +27,15 @@ type templateData struct {
 }
 
 type mailer struct {
-	config      SMTPConfig
-	templateDir string
-	dryRun      bool
-	logger      *log.Logger
+	config          SMTPConfig
+	templateDir     string
+	subjectTemplate string
+	dryRun          bool
+	logger          *log.Logger
 }
 
-func newMailer(cfg SMTPConfig, tmplDir string, dryRun bool, logger *log.Logger) *mailer {
-	return &mailer{config: cfg, templateDir: tmplDir, dryRun: dryRun, logger: logger}
+func newMailer(cfg SMTPConfig, tmplDir, subjectTemplate string, dryRun bool, logger *log.Logger) *mailer {
+	return &mailer{config: cfg, templateDir: tmplDir, subjectTemplate: subjectTemplate, dryRun: dryRun, logger: logger}
 }
 
 func (m *mailer) sendAlert(region Region, vd *VigilanceData) bool {
@@ -44,8 +45,11 @@ func (m *mailer) sendAlert(region Region, vd *VigilanceData) bool {
 	}
 
 	data := m.buildTemplateData(region, vd)
-	subject := fmt.Sprintf("%s [ALERTE METEO] Vigilance %s - %s",
-		data.ColorEmoji, data.ColorLabelUpper, data.RegionName)
+	subject, err := renderSubject(m.subjectTemplate, data)
+	if err != nil {
+		m.logger.Printf("Modele de sujet invalide (%v), sujet par defaut utilise", err)
+		subject = defaultSubject(data)
+	}
 
 	htmlBody, err := m.loadHTMLTemplate(vd.MaxColorInfo.Name, data)
 	if err != nil {
@@ -76,6 +80,25 @@ func (m *mailer) sendAlert(region Region, vd *VigilanceData) bool {
 
 	m.logger.Printf("Email envoye avec succes a %s pour %s", recipients, region.Name)
 	return true
+}
+
+func defaultSubject(data templateData) string {
+	return data.ColorEmoji + " [ALERTE METEO] Vigilance " + data.ColorLabelUpper + " - " + data.RegionName
+}
+
+func renderSubject(subjectTemplate string, data templateData) (string, error) {
+	if subjectTemplate == "" {
+		return defaultSubject(data), nil
+	}
+	tmpl, err := ht.New("subject").Parse(subjectTemplate)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(buf.String(), "\r", ""), "\n", " "), nil
 }
 
 func (m *mailer) buildTemplateData(region Region, vd *VigilanceData) templateData {

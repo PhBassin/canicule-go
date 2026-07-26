@@ -47,3 +47,23 @@ func TestValidateConfigRejectsDuplicateDepartment(t *testing.T) {
 		t.Fatal("validateConfig accepted duplicate departments")
 	}
 }
+
+func TestRenderSubject(t *testing.T) {
+	subject, err := renderSubject("[{{.ColorLabelUpper}}] {{.RegionName}}", templateData{ColorLabelUpper: "ORANGE", RegionName: "Paris"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subject != "[ORANGE] Paris" {
+		t.Fatalf("got %q", subject)
+	}
+}
+
+func TestRenderSubjectRemovesLineBreaks(t *testing.T) {
+	subject, err := renderSubject("Alert\n{{.RegionName}}", templateData{RegionName: "Paris"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subject != "Alert Paris" {
+		t.Fatalf("got %q", subject)
+	}
+}

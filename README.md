@@ -115,7 +115,8 @@ La publication de `v0.1.0` est disponible sur la page [Releases](https://github.
     "min_alert_color": "jaune",
     "only_notify_on_change": true,
     "state_file_path": "vigilance_state.json",
-    "template_dir": "templates"
+    "template_dir": "templates",
+    "subject_template": "{{.ColorEmoji}} [ALERTE METEO] Vigilance {{.ColorLabelUpper}} - {{.RegionName}}"
   },
   "regions": [
     {
@@ -136,6 +137,8 @@ Variables disponibles : `ColorEmoji`, `ColorName`, `ColorNameUpper`, `ColorLabel
 
 Si le template du niveau (orange/rouge) n'existe pas, il retombe sur `default.html`.  
 Si aucun template n'est trouvé, un fallback inline intégré au binaire est utilisé.
+
+Le sujet est configurable dans l'interface, ou par `global_settings.subject_template`. Il utilise les memes variables que les templates HTML. Laisser le champ vide conserve le sujet historique.
 
 ## CRON
 

@@ -64,7 +64,7 @@ func main() {
 		currentState[k] = v
 	}
 
-	mailer := newMailer(config.SMTP, templateDir, *dryRun || config.SMTP.DryRun, logger)
+	mailer := newMailer(config.SMTP, templateDir, gs.SubjectTemplate, *dryRun || config.SMTP.DryRun, logger)
 	notificationsSent := 0
 	errorsCount := 0
 

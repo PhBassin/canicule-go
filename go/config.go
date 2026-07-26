@@ -24,6 +24,7 @@ type GlobalSettings struct {
 	OnlyNotifyOnChange bool   `json:"only_notify_on_change"`
 	StateFilePath      string `json:"state_file_path"`
 	TemplateDir        string `json:"template_dir"`
+	SubjectTemplate    string `json:"subject_template"`
 }
 
 type Region struct {
