@@ -12,7 +12,24 @@ import (
 const (
 	mfPublicToken = "__Wj7dVSTjV9YGu1guveLyDq0g7S7TfTjaHBTPTpO0kj8__"
 	mfAPIURL      = "https://webservice.meteofrance.com/v3/warning/currentphenomenons"
+
+	// EcheanceToday demande la vigilance du jour meme (J).
+	EcheanceToday = "J"
+	// EcheanceTomorrow demande la prevision de vigilance pour le lendemain (J+1).
+	EcheanceTomorrow = "J1"
 )
+
+// echeanceLabel renvoie une etiquette humaine pour l'echeance passee.
+func echeanceLabel(echeance string) string {
+	switch echeance {
+	case EcheanceTomorrow:
+		return "demain (J+1)"
+	case EcheanceToday, "":
+		return "aujourd'hui (J)"
+	default:
+		return echeance
+	}
+}
 
 type ColorInfo struct {
 	Name  string `json:"name"`
@@ -31,6 +48,7 @@ type Phenomenon struct {
 
 type VigilanceData struct {
 	DepartmentCode string
+	Echeance       string
 	MaxColorCode   int
 	MaxColorInfo   ColorInfo
 	UpdateTime     int64
@@ -66,8 +84,11 @@ type mfResponse struct {
 	EndValidityTime int64 `json:"end_validity_time"`
 }
 
-func fetchVigilance(deptCode string) (*VigilanceData, error) {
-	url := fmt.Sprintf("%s?token=%s&domain=%s", mfAPIURL, mfPublicToken, deptCode)
+func fetchVigilance(deptCode, echeance string) (*VigilanceData, error) {
+	if echeance == "" {
+		echeance = EcheanceToday
+	}
+	url := fmt.Sprintf("%s?token=%s&domain=%s&echeance=%s", mfAPIURL, mfPublicToken, deptCode, echeance)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(url)
@@ -117,6 +138,7 @@ func fetchVigilance(deptCode string) (*VigilanceData, error) {
 
 	return &VigilanceData{
 		DepartmentCode: deptCode,
+		Echeance:       echeance,
 		MaxColorCode:   maxColor,
 		MaxColorInfo:   ci,
 		UpdateTime:     data.UpdateTime,
