@@ -84,6 +84,18 @@ cd canicule-go
 make all        # → dist/meteo_vigilance_linux_amd64 + .exe
 ```
 
+## Images et releases
+
+Chaque tag Git au format `vX.Y.Z` publie les binaires Linux et Windows dans la release GitHub et une image multi-architecture (`linux/amd64`, `linux/arm64`) dans GitHub Container Registry.
+
+```bash
+docker pull ghcr.io/phbassin/canicule-go:0.1.0
+# ou la derniere version publiee
+docker pull ghcr.io/phbassin/canicule-go:latest
+```
+
+La publication de `v0.1.0` est disponible sur la page [Releases](https://github.com/PhBassin/canicule-go/releases).
+
 ## Configuration (config.json)
 
 ```json
