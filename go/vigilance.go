@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -152,6 +153,42 @@ func phenomenaName(id int) string {
 		return name
 	}
 	return fmt.Sprintf("Phenomene #%d", id)
+}
+
+// vigilanceResult porte le resultat d'une recuperation de vigilance pour un
+// departement: soit les donnees, soit l'erreur rencontree.
+type vigilanceResult struct {
+	Data *VigilanceData
+	Err  error
+}
+
+// maxVigilanceConcurrency borne le nombre d'appels HTTP simultanes vers l'API
+// Meteo-France lors de la recuperation de tous les departements, afin de ne pas
+// saturer le service (ni nos sockets sortantes).
+const maxVigilanceConcurrency = 12
+
+// fetchAllVigilance recupere la vigilance de tous les departements
+// metropolitains pour une echeance donnee, en parallele et avec une
+// concurrence bornee. La cle de la map retournee est le code du departement.
+func fetchAllVigilance(echeance string) map[string]vigilanceResult {
+	results := make(map[string]vigilanceResult, len(departments))
+	sem := make(chan struct{}, maxVigilanceConcurrency)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, d := range departments {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(code string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			v, err := fetchVigilance(code, echeance)
+			mu.Lock()
+			results[code] = vigilanceResult{Data: v, Err: err}
+			mu.Unlock()
+		}(d.Code)
+	}
+	wg.Wait()
+	return results
 }
 
 

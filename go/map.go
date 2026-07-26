@@ -166,33 +166,32 @@ type mapDeptColors struct {
 }
 
 // renderFranceMap produit une carte SVG interactive avec toggle J / J+1.
-// Les departements non surveilles sont en gris clair; les surveilles sont
-// remplis de leur couleur de vigilance et entoures d'une bordure epaisse.
-func renderFranceMap(entries []statusEntry) (ht.HTML, error) {
+// Tous les departements sont colores selon leur niveau de vigilance Meteo
+// France (J et J+1). Les departements surveilles (configures pour l'envoi
+// d'alertes) sont en plus entoures d'une bordure epaisse pour les mettre en
+// evidence. Les departements dont la donnee n'a pu etre recuperee restent en
+// gris.
+func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored map[string]bool) (ht.HTML, error) {
 	paths, viewBox, err := franceMapData()
 	if err != nil {
 		return "", err
 	}
 
-	monitored := make(map[string]bool, len(entries))
-	todayColors := make(map[string]mapDeptColors, len(entries))
-	tomorrowColors := make(map[string]mapDeptColors, len(entries))
-	for _, e := range entries {
-		code := e.Region.DepartmentCode
-		if code == "" {
-			continue
-		}
-		monitored[code] = true
-		if e.Today != nil {
+	todayColors := make(map[string]mapDeptColors, len(todayAll))
+	tomorrowColors := make(map[string]mapDeptColors, len(tomorrowAll))
+	for code, r := range todayAll {
+		if r.Data != nil {
 			todayColors[code] = mapDeptColors{
-				Fill:  e.Today.MaxColorInfo.Hex,
-				Label: e.Today.MaxColorInfo.Label,
+				Fill:  r.Data.MaxColorInfo.Hex,
+				Label: r.Data.MaxColorInfo.Label,
 			}
 		}
-		if e.Tomorrow != nil {
+	}
+	for code, r := range tomorrowAll {
+		if r.Data != nil {
 			tomorrowColors[code] = mapDeptColors{
-				Fill:  e.Tomorrow.MaxColorInfo.Hex,
-				Label: e.Tomorrow.MaxColorInfo.Label,
+				Fill:  r.Data.MaxColorInfo.Hex,
+				Label: r.Data.MaxColorInfo.Label,
 			}
 		}
 	}
@@ -224,23 +223,22 @@ func renderFranceMap(entries []statusEntry) (ht.HTML, error) {
 		if monitored[p.Code] {
 			class += " monitored"
 		}
-		// Tooltip natif SVG via <title>. Pour un dept surveille, on montre
-		// les deux echeances afin que le survol reste informatif quel que
-		// soit le mode d'affichage courant.
-		var tip string
-		if monitored[p.Code] {
-			todayStr := "N/A"
-			tomStr := "N/A"
-			if t, ok := todayColors[p.Code]; ok {
-				todayStr = t.Label
-			}
-			if m, ok := tomorrowColors[p.Code]; ok {
-				tomStr = m.Label
-			}
-			tip = fmt.Sprintf("%s (%s) - J: %s | J+1: %s", p.Name, p.Code, todayStr, tomStr)
-		} else {
-			tip = fmt.Sprintf("%s (%s) - non surveille", p.Name, p.Code)
+		// Tooltip natif SVG via <title>. On montre les deux echeances afin
+		// que le survol reste informatif quel que soit le mode d'affichage
+		// courant, et on signale les departements surveilles.
+		todayStr := "N/A"
+		tomStr := "N/A"
+		if t, ok := todayColors[p.Code]; ok {
+			todayStr = t.Label
 		}
+		if m, ok := tomorrowColors[p.Code]; ok {
+			tomStr = m.Label
+		}
+		suffix := ""
+		if monitored[p.Code] {
+			suffix = " [surveille]"
+		}
+		tip := fmt.Sprintf("%s (%s) - J: %s | J+1: %s%s", p.Name, p.Code, todayStr, tomStr, suffix)
 		fmt.Fprintf(&b,
 			`<path id="dept-%s" class="%s" d="%s"><title>%s</title></path>`,
 			cssIDCode(p.Code), class, p.D, ht.HTMLEscapeString(tip))
@@ -253,7 +251,7 @@ func renderFranceMap(entries []statusEntry) (ht.HTML, error) {
 		c := colorMap[code]
 		fmt.Fprintf(&b, `<span class="lg"><span class="sw" style="background:%s"></span>%s %s</span>`, c.Hex, c.Emoji, c.Label)
 	}
-	b.WriteString(`<span class="lg"><span class="sw" style="background:#e2e8e5;border:1px solid #94a8a3"></span>Non surveille</span>`)
+	b.WriteString(`<span class="lg"><span class="sw" style="background:#e2e8e5;border:1px solid #94a8a3"></span>Donnee indisponible</span>`)
 	b.WriteString(`<span class="lg"><span class="sw" style="background:#fff;border:2px solid #173d38"></span>Surveille</span>`)
 	b.WriteString(`</div>`)
 

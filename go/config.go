@@ -25,6 +25,12 @@ type GlobalSettings struct {
 	StateFilePath      string `json:"state_file_path"`
 	TemplateDir        string `json:"template_dir"`
 	SubjectTemplate    string `json:"subject_template"`
+	// RefreshStart est l'heure de depart (format "HH:MM") du rafraichissement
+	// de la carte de vigilance. Vide => valeur par defaut (06:00).
+	RefreshStart string `json:"refresh_start"`
+	// RefreshIntervalHours est l'intervalle, en heures, entre deux
+	// rafraichissements de la carte. 0 => valeur par defaut (12 h).
+	RefreshIntervalHours int `json:"refresh_interval_hours"`
 }
 
 type Region struct {

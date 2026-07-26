@@ -34,13 +34,21 @@
       ]
     },
     {
-      "id": "13",
-      "name": "Bouches-du-Rhône (13)",
-      "department_code": "13",
-      "min_alert_color": "orange",
+      "id": "44",
+      "name": "Loire-Atlantique (44)",
+      "department_code": "44",
+      "min_alert_color": "jaune",
       "distribution_list": [
-        "astreinte-sud@entreprise.com",
-        "site-marseille@entreprise.com"
+        "astreinte-nantes@entreprise.com"
+      ]
+    },
+    {
+      "id": "56",
+      "name": "Morbihan (56)",
+      "department_code": "56",
+      "min_alert_color": "jaune",
+      "distribution_list": [
+        "astreinte-vannes@entreprise.com"
       ]
     },
     {
@@ -50,15 +58,6 @@
       "min_alert_color": "jaune",
       "distribution_list": [
         "astreinte-lyon@entreprise.com"
-      ]
-    },
-    {
-      "id": "33",
-      "name": "Gironde (33)",
-      "department_code": "33",
-      "min_alert_color": "orange",
-      "distribution_list": [
-        "astreinte-bordeaux@entreprise.com"
       ]
     }
   ]

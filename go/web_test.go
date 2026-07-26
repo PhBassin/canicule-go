@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestAdminPageRendersDepartmentControls(t *testing.T) {
@@ -89,5 +90,41 @@ func TestRenderSubjectRemovesLineBreaks(t *testing.T) {
 	}
 	if subject != "Alert Paris" {
 		t.Fatalf("got %q", subject)
+	}
+}
+
+func TestLastScheduledRefresh(t *testing.T) {
+	loc := time.UTC
+	day := func(h, m int) time.Time { return time.Date(2026, 7, 26, h, m, 0, 0, loc) }
+	interval := 12 * time.Hour // creneaux: 06:00 et 18:00
+
+	cases := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{"apres le creneau du matin", day(10, 0), day(6, 0)},
+		{"pile sur un creneau", day(18, 0), day(18, 0)},
+		{"apres le creneau du soir", day(18, 30), day(18, 0)},
+		{"avant le premier creneau du jour", day(5, 0), time.Date(2026, 7, 25, 18, 0, 0, 0, loc)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := lastScheduledRefresh(c.now, 6, 0, interval)
+			if !got.Equal(c.want) {
+				t.Fatalf("lastScheduledRefresh(%v) = %v, want %v", c.now, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRefreshScheduleDefaults(t *testing.T) {
+	h, m, interval := refreshSchedule(GlobalSettings{})
+	if h != 6 || m != 0 || interval != 12*time.Hour {
+		t.Fatalf("defauts = %02d:%02d/%v, want 06:00/12h", h, m, interval)
+	}
+	h, m, interval = refreshSchedule(GlobalSettings{RefreshStart: "08:30", RefreshIntervalHours: 6})
+	if h != 8 || m != 30 || interval != 6*time.Hour {
+		t.Fatalf("configures = %02d:%02d/%v, want 08:30/6h", h, m, interval)
 	}
 }
