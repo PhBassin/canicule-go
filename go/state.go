@@ -30,7 +30,7 @@ func saveState(path string, state map[string]DeptState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return writeFileAtomically(path, data, 0644)
 }
 
 func nowISO() string {

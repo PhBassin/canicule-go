@@ -1,0 +1,4 @@
+.git
+.codegraph
+dist
+go/vigilance_state.json

@@ -12,7 +12,16 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "Simuler les envois sans SMTP reel")
 	force := flag.Bool("force", false, "Forcer l'envoi meme si le statut n'a pas change")
 	verbose := flag.Bool("v", false, "Logs detailles (DEBUG)")
+	web := flag.Bool("web", false, "Lancer l'interface web d'administration")
+	webAddress := flag.String("web-address", ":8080", "Adresse d'ecoute de l'interface web")
 	flag.Parse()
+	if *web {
+		if err := runWebServer(*webAddress, *configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "[ERREUR CRITIQUE] %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	config, err := loadConfig(*configPath)
 	if err != nil {
@@ -159,5 +168,3 @@ func setupLogger(verbose *bool) *log.Logger {
 	}
 	return log.New(os.Stdout, "[INFO] ", flags)
 }
-
-

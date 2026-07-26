@@ -23,6 +23,28 @@ canicule/
 ./meteo_vigilance_linux_amd64 --force -v -c config.json    # forcé + logs détaillés
 ```
 
+## Interface web et Docker
+
+L'interface web permet de modifier les reglages SMTP, les regions et les fichiers de modeles HTML sans reconstruire le binaire. Elle ne doit pas etre exposee directement sur Internet : elle donne acces au mot de passe SMTP.
+
+```bash
+# En local, depuis le dossier contenant config.json et templates/
+CANICULE_WEB_USER=admin CANICULE_WEB_PASSWORD=un-secret-solide \
+  ./meteo_vigilance_linux_amd64 --web --web-address :8080 -c config.json
+
+# Conteneur minimal (les donnees sont persistantes dans le volume canicule-data)
+docker build -t canicule .
+docker run -d --name canicule -p 127.0.0.1:8080:8080 \
+  -e CANICULE_WEB_USER=admin -e CANICULE_WEB_PASSWORD=un-secret-solide \
+  -v canicule-data:/data canicule
+```
+
+Au premier lancement, le conteneur initialise `/data/config.json` et `/data/templates/`. Le fichier de configuration et les modeles sont ensuite sauvegardes dans ce volume. Pour executer ponctuellement la surveillance dans ce meme volume :
+
+```bash
+docker run --rm -v canicule-data:/data canicule --force -c /data/config.json
+```
+
 ## Build (depuis les sources)
 
 ```bash
