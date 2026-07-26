@@ -1,5 +1,6 @@
 dist/
 .codegraph/
+.canicule-web-credentials
 go/meteo_vigilance
 *.exe
 vigilance_state.json

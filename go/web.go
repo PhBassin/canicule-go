@@ -14,20 +14,15 @@ import (
 )
 
 type webServer struct {
-	configPath string
-	username   string
-	password   string
-	mu         sync.Mutex
+	configPath, username, password string
+	mu                             sync.Mutex
 }
-
 type pageData struct {
-	Config       *Config
-	Templates    []string
-	TemplatePage bool
-	Selected     string
-	Content      string
-	Message      string
-	Error        string
+	Config                            *Config
+	Departments                       []department
+	Templates                         []string
+	TemplatePage                      bool
+	Selected, Content, Message, Error string
 }
 
 func runWebServer(address, configPath string) error {
@@ -45,8 +40,8 @@ func runWebServer(address, configPath string) error {
 
 func (s *webServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		username, password, ok := r.BasicAuth()
-		if !ok || username != s.username || password != s.password {
+		user, password, ok := r.BasicAuth()
+		if !ok || user != s.username || password != s.password {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Canicule"`)
 			http.Error(w, "Authentification requise", http.StatusUnauthorized)
 			return
@@ -54,18 +49,25 @@ func (s *webServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
+func parsePost(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		return true
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Formulaire invalide", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
 
 func (s *webServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Methode non autorisee", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Formulaire invalide", http.StatusBadRequest)
-			return
-		}
+	if !parsePost(w, r) {
+		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -74,7 +76,7 @@ func (s *webServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		s.render(w, pageData{Error: err.Error()})
 		return
 	}
-	data := pageData{Config: cfg}
+	data := pageData{Config: cfg, Departments: departments}
 	if r.Method == http.MethodPost {
 		updateConfigFromForm(cfg, r)
 		if err := validateConfig(cfg); err != nil {
@@ -93,12 +95,8 @@ func (s *webServer) handleTemplates(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Methode non autorisee", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.Method == http.MethodPost {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "Formulaire invalide", http.StatusBadRequest)
-			return
-		}
+	if !parsePost(w, r) {
+		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,10 +142,7 @@ func (s *webServer) handleTemplates(w http.ResponseWriter, r *http.Request) {
 
 func (s *webServer) render(w http.ResponseWriter, data pageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.New("admin").Funcs(template.FuncMap{
-		"colors": func() []string { return []string{"jaune", "orange", "rouge"} },
-		"join":   strings.Join,
-	}).Parse(adminPage)
+	tmpl, err := template.New("admin").Funcs(template.FuncMap{"colors": func() []string { return []string{"jaune", "orange", "rouge"} }, "join": strings.Join}).Parse(adminPage)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -163,16 +158,21 @@ func updateConfigFromForm(cfg *Config, r *http.Request) {
 	cfg.GlobalSettings.OnlyNotifyOnChange = r.FormValue("only_notify") != ""
 	cfg.GlobalSettings.StateFilePath = r.FormValue("state_file")
 	cfg.GlobalSettings.TemplateDir = r.FormValue("template_dir")
-	for i := range cfg.Regions {
+	count := formCount(r.FormValue("region_count"))
+	cfg.Regions = nil
+	for i := 0; i < count; i++ {
 		prefix := fmt.Sprintf("region_%d_", i)
-		cfg.Regions[i].ID = r.FormValue(prefix + "id")
-		cfg.Regions[i].Name = r.FormValue(prefix + "name")
-		cfg.Regions[i].DepartmentCode = r.FormValue(prefix + "department")
-		cfg.Regions[i].MinAlertColor = r.FormValue(prefix + "color")
-		cfg.Regions[i].DistList = recipients(r.FormValue(prefix + "recipients"))
+		if r.FormValue(prefix+"remove") != "" {
+			continue
+		}
+		code := r.FormValue(prefix + "department")
+		department, ok := departmentByCode(code)
+		if !ok {
+			continue
+		}
+		cfg.Regions = append(cfg.Regions, Region{ID: code, Name: department.Name, DepartmentCode: code, MinAlertColor: r.FormValue(prefix + "color"), DistList: recipients(r.FormValue(prefix + "recipients"))})
 	}
 }
-
 func recipients(value string) []string {
 	items := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == '\n' || r == ';' })
 	for i := range items {
@@ -180,7 +180,6 @@ func recipients(value string) []string {
 	}
 	return items
 }
-
 func formInt(value string, fallback int) int {
 	var n int
 	if _, err := fmt.Sscanf(value, "%d", &n); err != nil || n < 1 || n > 65535 {
@@ -189,6 +188,13 @@ func formInt(value string, fallback int) int {
 	return n
 }
 
+func formCount(value string) int {
+	var n int
+	if _, err := fmt.Sscanf(value, "%d", &n); err != nil || n < 0 || n > len(departments) {
+		return 0
+	}
+	return n
+}
 func validateConfig(cfg *Config) error {
 	if cfg.SMTP.Host == "" || cfg.SMTP.Sender == "" {
 		return fmt.Errorf("L'hote SMTP et l'adresse d'expedition sont obligatoires.")
@@ -199,17 +205,21 @@ func validateConfig(cfg *Config) error {
 	if cfg.GlobalSettings.StateFilePath == "" || cfg.GlobalSettings.TemplateDir == "" {
 		return fmt.Errorf("Le fichier d'etat et le dossier des modeles sont obligatoires.")
 	}
+	seen := make(map[string]bool)
 	for _, region := range cfg.Regions {
-		if region.Name == "" || region.DepartmentCode == "" {
-			return fmt.Errorf("Chaque region doit avoir un nom et un departement.")
+		if _, ok := departmentByCode(region.DepartmentCode); !ok {
+			return fmt.Errorf("Departement invalide: %s.", region.DepartmentCode)
 		}
+		if seen[region.DepartmentCode] {
+			return fmt.Errorf("Le departement %s est configure plusieurs fois.", region.DepartmentCode)
+		}
+		seen[region.DepartmentCode] = true
 		if region.MinAlertColor != "" && colorNameToCode(region.MinAlertColor) == 0 {
 			return fmt.Errorf("Couleur invalide pour %s.", region.Name)
 		}
 	}
 	return nil
 }
-
 func validateEmailTemplate(name, content string) error {
 	tmpl, err := template.New(name).Parse(content)
 	if err != nil {
@@ -217,11 +227,9 @@ func validateEmailTemplate(name, content string) error {
 	}
 	return tmpl.Execute(io.Discard, templateData{})
 }
-
 func validTemplateName(name string) bool {
 	return name != "" && filepath.Base(name) == name && strings.HasSuffix(name, ".html")
 }
-
 func listTemplates(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -237,6 +245,4 @@ func listTemplates(dir string) []string {
 	return names
 }
 
-const adminPage = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Canicule</title><style>
-*{box-sizing:border-box}body{margin:0;background:#eef3f1;color:#17201f;font:16px system-ui,sans-serif}header{background:#173d38;color:#fff;padding:26px max(5vw,24px)}header h1{margin:0}main{max-width:1100px;margin:30px auto;padding:0 20px}.tabs{display:flex;gap:8px;margin-bottom:20px}.tabs a{padding:10px 15px;background:#d5e3df;color:#173d38;text-decoration:none;border-radius:6px;font-weight:700}.card{background:#fff;border-radius:10px;padding:26px;box-shadow:0 4px 16px #173d3818;margin-bottom:20px}h2{color:#173d38}h3{margin-top:30px}label{display:block;font-weight:650;margin:12px 0 5px}input,select,textarea{width:100%;padding:10px;border:1px solid #aec4be;border-radius:5px;font:inherit}textarea{min-height:430px;font:14px ui-monospace,monospace}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.checks{display:flex;gap:20px;flex-wrap:wrap}.checks label{font-weight:400}.checks input{width:auto}.region{border-top:1px solid #d9e5e2;margin-top:20px;padding-top:12px}.notice{padding:12px;border-radius:6px;margin-bottom:18px}.ok{background:#dcf4e8}.error{background:#fbe2e1;color:#8b2420}button{background:#dc5b2f;border:0;border-radius:5px;color:#fff;padding:11px 18px;font-weight:700;font-size:16px}.hint{font-size:14px;color:#526661}@media(max-width:650px){.grid{grid-template-columns:1fr}}
-</style></head><body><header><h1>Canicule</h1><p>Administration de la surveillance vigilance Meteo France</p></header><main><nav class="tabs"><a href="/">Configuration</a><a href="/templates">Modeles d'e-mails</a></nav>{{if .Message}}<div class="notice ok">{{.Message}}</div>{{end}}{{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}{{if .Config}}{{if .TemplatePage}}<section class="card"><h2>Modele d'e-mail</h2><form method="get"><select name="name" onchange="this.form.submit()">{{range .Templates}}<option value="{{.}}" {{if eq . $.Selected}}selected{{end}}>{{.}}</option>{{end}}</select></form><form method="post"><input type="hidden" name="name" value="{{.Selected}}"><label>HTML du modele</label><textarea name="content">{{.Content}}</textarea><p class="hint">Variables: ColorEmoji, ColorName, ColorNameUpper, ColorLabel, ColorLabelUpper, ColorHex, RegionName, UpdateStr, Recipients, PhenomenaHTML.</p><button>Enregistrer le modele</button></form></section>{{else}}<section class="card"><h2>Configuration</h2><form method="post"><h3>SMTP</h3><div class="grid"><label>Hote<input name="smtp_host" value="{{.Config.SMTP.Host}}"></label><label>Port<input type="number" name="smtp_port" value="{{.Config.SMTP.Port}}"></label><label>Utilisateur<input name="smtp_username" value="{{.Config.SMTP.Username}}"></label><label>Mot de passe<input type="password" name="smtp_password" value="{{.Config.SMTP.Password}}"></label><label>Adresse d'expedition<input type="email" name="smtp_sender" value="{{.Config.SMTP.Sender}}"></label><label>Nom d'expediteur<input name="smtp_sender_name" value="{{.Config.SMTP.SenderName}}"></label></div><div class="checks"><label><input type="checkbox" name="smtp_tls" {{if .Config.SMTP.UseTLS}}checked{{end}}>STARTTLS</label><label><input type="checkbox" name="smtp_ssl" {{if .Config.SMTP.UseSSL}}checked{{end}}>SSL</label><label><input type="checkbox" name="smtp_dry_run" {{if .Config.SMTP.DryRun}}checked{{end}}>Simulation</label></div><h3>Regles</h3><div class="grid"><label>Couleur minimale<select name="min_alert_color">{{range $c:=colors}}<option value="{{$c}}" {{if eq $c $.Config.GlobalSettings.MinAlertColor}}selected{{end}}>{{$c}}</option>{{end}}</select></label><label>Fichier d'etat<input name="state_file" value="{{.Config.GlobalSettings.StateFilePath}}"></label><label>Dossier des modeles<input name="template_dir" value="{{.Config.GlobalSettings.TemplateDir}}"></label></div><div class="checks"><label><input type="checkbox" name="only_notify" {{if .Config.GlobalSettings.OnlyNotifyOnChange}}checked{{end}}>Notifier uniquement lors d'un changement</label></div><h3>Regions</h3>{{range $i,$r:=.Config.Regions}}<div class="region"><div class="grid"><label>Identifiant<input name="region_{{$i}}_id" value="{{$r.ID}}"></label><label>Nom<input name="region_{{$i}}_name" value="{{$r.Name}}"></label><label>Departement<input name="region_{{$i}}_department" value="{{$r.DepartmentCode}}"></label><label>Couleur minimale<select name="region_{{$i}}_color"><option value="">Reglage global</option>{{range $c:=colors}}<option value="{{$c}}" {{if eq $c $r.MinAlertColor}}selected{{end}}>{{$c}}</option>{{end}}</select></label></div><label>Destinataires (separes par une virgule)<input name="region_{{$i}}_recipients" value="{{join $r.DistList ", "}}"></label></div>{{end}}<button>Enregistrer la configuration</button></form></section>{{end}}{{end}}</main></body></html>`
+const adminPage = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Canicule</title><style>*{box-sizing:border-box}body{margin:0;background:#eef3f1;color:#17201f;font:16px system-ui,sans-serif}header{background:#173d38;color:#fff;padding:26px max(5vw,24px)}header h1{margin:0}main{max-width:1100px;margin:30px auto;padding:0 20px}.tabs{display:flex;gap:8px;margin-bottom:20px}.tabs a{padding:10px 15px;background:#d5e3df;color:#173d38;text-decoration:none;border-radius:6px;font-weight:700}.card{background:#fff;border-radius:10px;padding:26px;box-shadow:0 4px 16px #173d3818;margin-bottom:20px}h2{color:#173d38}h3{margin-top:30px}label{display:block;font-weight:650;margin:12px 0 5px}input,select,textarea{width:100%;padding:10px;border:1px solid #aec4be;border-radius:5px;font:inherit}textarea{min-height:430px;font:14px ui-monospace,monospace}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}.checks{display:flex;gap:20px;flex-wrap:wrap}.checks label{font-weight:400}.checks input{width:auto}.region{border-top:1px solid #d9e5e2;margin-top:20px;padding-top:12px}.region h4{margin:0;color:#173d38}.notice{padding:12px;border-radius:6px;margin-bottom:18px}.ok{background:#dcf4e8}.error{background:#fbe2e1;color:#8b2420}button{background:#dc5b2f;border:0;border-radius:5px;color:#fff;padding:11px 18px;font-weight:700;font-size:16px;cursor:pointer}.secondary{background:#315d56}.remove{background:#8b2420;font-size:14px;padding:8px 12px;float:right}.hint{font-size:14px;color:#526661}@media(max-width:650px){.grid{grid-template-columns:1fr}}</style></head><body><header><h1>Canicule</h1><p>Administration de la surveillance vigilance Meteo France</p></header><main><nav class="tabs"><a href="/">Configuration</a><a href="/templates">Modeles d'e-mails</a></nav>{{if .Message}}<div class="notice ok">{{.Message}}</div>{{end}}{{if .Error}}<div class="notice error">{{.Error}}</div>{{end}}{{if .Config}}{{if .TemplatePage}}<section class="card"><h2>Modele d'e-mail</h2><form method="get"><select name="name" onchange="this.form.submit()">{{range .Templates}}<option value="{{.}}" {{if eq . $.Selected}}selected{{end}}>{{.}}</option>{{end}}</select></form><form method="post"><input type="hidden" name="name" value="{{.Selected}}"><label>HTML du modele</label><textarea name="content">{{.Content}}</textarea><p class="hint">Variables: ColorEmoji, ColorName, ColorNameUpper, ColorLabel, ColorLabelUpper, ColorHex, RegionName, UpdateStr, Recipients, PhenomenaHTML.</p><button>Enregistrer le modele</button></form></section>{{else}}<section class="card"><h2>Configuration</h2><form method="post" id="config"><h3>SMTP</h3><div class="grid"><label>Hote<input name="smtp_host" value="{{.Config.SMTP.Host}}"></label><label>Port<input type="number" name="smtp_port" value="{{.Config.SMTP.Port}}"></label><label>Utilisateur<input name="smtp_username" value="{{.Config.SMTP.Username}}"></label><label>Mot de passe<input type="password" name="smtp_password" value="{{.Config.SMTP.Password}}"></label><label>Adresse d'expedition<input type="email" name="smtp_sender" value="{{.Config.SMTP.Sender}}"></label><label>Nom d'expediteur<input name="smtp_sender_name" value="{{.Config.SMTP.SenderName}}"></label></div><div class="checks"><label><input type="checkbox" name="smtp_tls" {{if .Config.SMTP.UseTLS}}checked{{end}}>STARTTLS</label><label><input type="checkbox" name="smtp_ssl" {{if .Config.SMTP.UseSSL}}checked{{end}}>SSL</label><label><input type="checkbox" name="smtp_dry_run" {{if .Config.SMTP.DryRun}}checked{{end}}>Simulation</label></div><h3>Regles</h3><div class="grid"><label>Couleur minimale<select name="min_alert_color">{{range $c:=colors}}<option value="{{$c}}" {{if eq $c $.Config.GlobalSettings.MinAlertColor}}selected{{end}}>{{$c}}</option>{{end}}</select></label><label>Fichier d'etat<input name="state_file" value="{{.Config.GlobalSettings.StateFilePath}}"></label><label>Dossier des modeles<input name="template_dir" value="{{.Config.GlobalSettings.TemplateDir}}"></label></div><div class="checks"><label><input type="checkbox" name="only_notify" {{if .Config.GlobalSettings.OnlyNotifyOnChange}}checked{{end}}>Notifier uniquement lors d'un changement</label></div><h3>Departements surveilles</h3><p class="hint">Chaque departement possede ses propres seuil et liste de destinataires.</p><input type="hidden" id="region_count" name="region_count" value="{{len .Config.Regions}}"><div id="regions">{{range $i,$r:=.Config.Regions}}<section class="region"><button type="button" class="remove" onclick="this.parentElement.remove();renumber()">Retirer</button><h4>{{$r.DepartmentCode}} - {{$r.Name}}</h4><div class="grid"><label>Departement<select data-field="department" name="region_{{$i}}_department" onchange="updateTitle(this)">{{range $d:=$.Departments}}<option value="{{$d.Code}}" {{if eq $d.Code $r.DepartmentCode}}selected{{end}}>{{$d.Code}} - {{$d.Name}}</option>{{end}}</select></label><label>Couleur minimale<select data-field="color" name="region_{{$i}}_color"><option value="">Reglage global</option>{{range $c:=colors}}<option value="{{$c}}" {{if eq $c $r.MinAlertColor}}selected{{end}}>{{$c}}</option>{{end}}</select></label></div><label>Destinataires (separes par une virgule)<input data-field="recipients" name="region_{{$i}}_recipients" value="{{join $r.DistList ", "}}"></label></section>{{end}}</div><button type="button" class="secondary" onclick="addDepartment()">Ajouter un departement</button> <button>Enregistrer la configuration</button></form></section><template id="region-template"><section class="region"><button type="button" class="remove" onclick="this.parentElement.remove();renumber()">Retirer</button><h4>Nouveau departement</h4><div class="grid"><label>Departement<select data-field="department" onchange="updateTitle(this)">{{range .Departments}}<option value="{{.Code}}">{{.Code}} - {{.Name}}</option>{{end}}</select></label><label>Couleur minimale<select data-field="color"><option value="">Reglage global</option>{{range $c:=colors}}<option value="{{$c}}">{{$c}}</option>{{end}}</select></label></div><label>Destinataires (separes par une virgule)<input data-field="recipients"></label></section></template><script>function renumber(){let sections=document.querySelectorAll('#regions .region');sections.forEach((section,index)=>section.querySelectorAll('[name]').forEach(field=>field.name='region_'+index+'_'+field.dataset.field));document.getElementById('region_count').value=sections.length}function addDepartment(){let section=document.getElementById('region-template').content.firstElementChild.cloneNode(true);section.querySelectorAll('[data-field]').forEach(field=>field.name='region_0_'+field.dataset.field);document.getElementById('regions').appendChild(section);renumber();updateTitle(section.querySelector('select'))}function updateTitle(select){select.closest('.region').querySelector('h4').textContent=select.options[select.selectedIndex].text}</script>{{end}}{{end}}</main></body></html>`
