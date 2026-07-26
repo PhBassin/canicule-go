@@ -1,10 +1,34 @@
 package main
 
 import (
+	"bytes"
+	"html/template"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 )
+
+func TestAdminPageRendersDepartmentControls(t *testing.T) {
+	tmpl, err := template.New("admin").Funcs(template.FuncMap{
+		"colors": func() []string { return []string{"jaune", "orange", "rouge"} },
+		"join":   func(items []string, separator string) string { return "" },
+	}).Parse(adminPage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var page bytes.Buffer
+	err = tmpl.Execute(&page, pageData{Config: &Config{
+		SMTP:           SMTPConfig{Host: "smtp.example.test", Sender: "alerts@example.test"},
+		GlobalSettings: GlobalSettings{MinAlertColor: "jaune", StateFilePath: "state.json", TemplateDir: "templates"},
+		Regions:        []Region{{DepartmentCode: "75", Name: "Paris"}},
+	}, Departments: departments})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(page.Bytes(), []byte("Ajouter un departement")) {
+		t.Fatal("department add control is missing from rendered page")
+	}
+}
 
 func TestUpdateConfigFromFormBuildsDepartments(t *testing.T) {
 	cfg := &Config{Regions: []Region{{DepartmentCode: "75"}}}
