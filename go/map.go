@@ -188,8 +188,12 @@ type mapDeptColors struct {
 
 // renderFranceMap produit une carte SVG interactive avec toggle J / J+1.
 // Tous les departements sont colores selon leur niveau de vigilance Meteo
-// France (J et J+1). Les departements surveilles (configures pour l'envoi
-// d'alertes) sont en plus entoures d'une bordure epaisse. Un encart zoome sur
+// France (J et J+1) et cernes d'un contour sombre uniforme. Les departements
+// surveilles (configures pour l'envoi d'alertes) recoivent en plus, en overlay
+// par-dessus les remplissages, un contour bleu lumineux (halo via filtre SVG)
+// qui les fait surgir et tranche avec la palette de vigilance
+// (vert/jaune/orange/rouge), tout en restant entier quel que soit l'ordre de
+// peinture. Un encart zoome sur
 // l'Ile-de-France, dont la petite couronne est illisible a l'echelle nationale.
 func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored map[string]bool) (ht.HTML, error) {
 	france, idf, err := mapData()
@@ -228,12 +232,22 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 		return fmt.Sprintf("%s (%s) - J: %s | J+1: %s%s", p.Name, p.Code, todayStr, tomStr, suffix)
 	}
 	writePath := func(b *strings.Builder, idPrefix string, p deptPath) {
-		class := "dept"
-		if monitored[p.Code] {
-			class += " monitored"
+		fmt.Fprintf(b, `<path id="%s-%s" class="dept" d="%s"><title>%s</title></path>`,
+			idPrefix, cssIDCode(p.Code), p.D, ht.HTMLEscapeString(tipFor(p)))
+	}
+	// writeMonitored dessine, PAR-DESSUS tous les remplissages, un contour bleu
+	// lumineux (avec halo par filtre SVG) pour chaque departement surveille. Ce
+	// second passage est indispensable: dessiner la bordure sur le path de base
+	// la laisse partiellement recouverte par le remplissage des departements
+	// voisins traces ensuite (ordre de peinture SVG). En overlay, le contour
+	// reste entier et fait litteralement surgir la zone surveillee.
+	writeMonitored := func(b *strings.Builder, paths []deptPath) {
+		for _, p := range paths {
+			if !monitored[p.Code] {
+				continue
+			}
+			fmt.Fprintf(b, `<path class="dept-ring" d="%s"/>`, p.D)
 		}
-		fmt.Fprintf(b, `<path id="%s-%s" class="%s" d="%s"><title>%s</title></path>`,
-			idPrefix, cssIDCode(p.Code), class, p.D, ht.HTMLEscapeString(tipFor(p)))
 	}
 
 	var b strings.Builder
@@ -247,8 +261,8 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 	// CSS pour un basculement instantane. Les regles s'appliquent a la fois a
 	// la carte nationale (#dept-XX) et a l'encart IDF (#idf-XX).
 	b.WriteString(`<style>`)
-	b.WriteString(`.france-map .dept{fill:#e2e8e5;stroke:#94a8a3;stroke-width:0.5;transition:fill .15s}`)
-	b.WriteString(`.france-map .dept.monitored{stroke:#173d38;stroke-width:2}`)
+	b.WriteString(`.france-map .dept{fill:#e2e8e5;stroke:#1d1f1e;stroke-width:0.7;stroke-linejoin:round;transition:fill .15s}`)
+	b.WriteString(`.france-map .dept-ring{fill:none;stroke:#1a56db;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;filter:url(#fm-pop)}`)
 	b.WriteString(`.france-map .inset-bg{fill:#f5f9f7;stroke:#173d38;stroke-width:1.5}`)
 	b.WriteString(`.france-map .inset-label{font:700 15px system-ui,sans-serif;fill:#173d38}`)
 	for code, c := range todayColors {
@@ -279,9 +293,18 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 	}
 
 	fmt.Fprintf(&b, `<svg viewBox="%s" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Carte de vigilance des departements de France metropolitaine">`, viewBox)
+	// Filtre "pop": halo bleu lumineux double (large + serre) qui fait surgir
+	// les departements surveilles au-dessus de la carte. Reference par les deux
+	// svg (national + encart) via url(#fm-pop).
+	b.WriteString(`<defs><filter id="fm-pop" x="-40%" y="-40%" width="180%" height="180%">` +
+		`<feDropShadow dx="0" dy="0" stdDeviation="3.2" flood-color="#1a56db" flood-opacity="0.95"/>` +
+		`<feDropShadow dx="0" dy="0" stdDeviation="1.4" flood-color="#0b2f8f" flood-opacity="0.9"/>` +
+		`</filter></defs>`)
 	for _, p := range france.Paths {
 		writePath(&b, "dept", p)
 	}
+	// Overlay des contours surveilles, par-dessus tous les remplissages.
+	writeMonitored(&b, france.Paths)
 
 	// Encart Ile-de-France, place dans la marge gauche (nord-ouest, en mer)
 	// pour zoomer la petite couronne illisible a l'echelle nationale.
@@ -294,6 +317,7 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 		for _, p := range idf.Paths {
 			writePath(&b, "idf", p)
 		}
+		writeMonitored(&b, idf.Paths)
 		b.WriteString(`</svg>`)
 	}
 
@@ -306,7 +330,7 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 		fmt.Fprintf(&b, `<span class="lg"><span class="sw" style="background:%s"></span>%s %s</span>`, c.Hex, c.Emoji, c.Label)
 	}
 	b.WriteString(`<span class="lg"><span class="sw" style="background:#e2e8e5;border:1px solid #94a8a3"></span>Donnee indisponible</span>`)
-	b.WriteString(`<span class="lg"><span class="sw" style="background:#fff;border:2px solid #173d38"></span>Surveille</span>`)
+	b.WriteString(`<span class="lg"><span class="sw" style="background:#e2e8e5;border:2px solid #1a56db;box-shadow:0 0 5px 1px #1a56db"></span>Surveille</span>`)
 	b.WriteString(`</div>`)
 
 	b.WriteString(`</div>`)
