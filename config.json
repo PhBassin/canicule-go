@@ -31,23 +31,16 @@
       "distribution_list": ["astreinte-idf@entreprise.com"]
     },
     {
-      "id": "rennes",
-      "name": "Rennes - Bretagne",
-      "department_codes": ["22", "29", "35", "56"],
-      "min_alert_color": "jaune",
-      "distribution_list": ["astreinte-rennes@entreprise.com"]
-    },
-    {
-      "id": "nantes",
-      "name": "Nantes - Pays de la Loire",
-      "department_codes": ["44", "49", "53", "72", "85"],
+      "id": "ouest",
+      "name": "Rennes - Nantes",
+      "department_codes": ["35", "44", "49", "56"],
       "min_alert_color": "jaune",
       "distribution_list": ["astreinte-nantes@entreprise.com"]
     },
     {
       "id": "lyon",
-      "name": "Lyon - Auvergne-Rhone-Alpes",
-      "department_codes": ["01", "03", "07", "15", "26", "38", "42", "43", "63", "69", "73", "74"],
+      "name": "Lyon",
+      "department_codes": ["01", "26", "38", "42", "69"],
       "min_alert_color": "jaune",
       "distribution_list": ["astreinte-lyon@entreprise.com"]
     }

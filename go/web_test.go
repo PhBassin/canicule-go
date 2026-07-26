@@ -127,3 +127,24 @@ func TestRefreshScheduleDefaults(t *testing.T) {
 		t.Fatalf("configures = %02d:%02d/%v, want 08:30/6h", h, m, interval)
 	}
 }
+
+func TestRenderFranceMapIncludesOneInsetPerPerimeter(t *testing.T) {
+	regions := []Region{
+		{Name: "Ile-de-France", DepartmentCodes: []string{"75", "77"}},
+		{Name: "Rennes - Nantes", DepartmentCodes: []string{"35", "44"}},
+		{Name: "Lyon", DepartmentCodes: []string{"69", "38"}},
+	}
+	mapHTML, err := renderFranceMap(nil, nil, map[string]bool{"75": true, "35": true, "69": true}, regions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(mapHTML)
+	for _, name := range []string{"Ile-de-France", "Rennes - Nantes", "Lyon"} {
+		if !bytes.Contains([]byte(page), []byte(name)) {
+			t.Fatalf("missing inset title %q", name)
+		}
+	}
+	if got := bytes.Count([]byte(page), []byte(`class="inset-bg"`)); got != len(regions) {
+		t.Fatalf("got %d insets, want %d", got, len(regions))
+	}
+}

@@ -339,7 +339,7 @@ func buildStatusData(cfg *Config, todayAll, tomorrowAll map[string]vigilanceResu
 	}
 
 	data := statusPageData{Entries: entries, NowStr: nowISO()}
-	if mapHTML, err := renderFranceMap(todayAll, tomorrowAll, monitored); err != nil {
+	if mapHTML, err := renderFranceMap(todayAll, tomorrowAll, monitored, cfg.Regions); err != nil {
 		data.Error = "Carte indisponible: " + err.Error()
 	} else {
 		data.MapHTML = mapHTML

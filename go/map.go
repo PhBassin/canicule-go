@@ -36,24 +36,17 @@ type projectedMap struct {
 }
 
 var (
-	mapOnce   sync.Once
-	franceMap projectedMap
-	idfMap    projectedMap
-	mapErr    error
+	mapOnce     sync.Once
+	franceMap   projectedMap
+	mapFeatures []mapFeature
+	mapErr      error
 )
 
 // mapWidth est la largeur en unites SVG cible pour la carte de France.
 const mapWidth = 1000.0
 
-// idfWidth est la largeur en unites SVG cible pour l'encart Ile-de-France.
-const idfWidth = 320.0
-
-// idfCodes recense les departements d'Ile-de-France, mis en avant dans l'encart
-// de zoom (la petite couronne etant illisible a l'echelle nationale).
-var idfCodes = map[string]bool{
-	"75": true, "77": true, "78": true, "91": true,
-	"92": true, "93": true, "94": true, "95": true,
-}
+// insetWidth est la largeur en unites SVG cible pour les encarts de perimetre.
+const insetWidth = 320.0
 
 // buildMaps parse le GeoJSON une seule fois et pre-calcule les paths SVG de la
 // carte nationale et de l'encart Ile-de-France.
@@ -85,8 +78,8 @@ func buildMaps() {
 		feats = append(feats, mapFeature{Code: f.Properties.Code, Name: f.Properties.Nom, Polys: polys})
 	}
 
+	mapFeatures = feats
 	franceMap = projectFeatures(feats, nil, mapWidth)
-	idfMap = projectFeatures(feats, idfCodes, idfWidth)
 }
 
 // projectFeatures projette les features retenus (filter nil => tous) dans leur
@@ -173,11 +166,11 @@ func extractPolygons(geomType string, raw json.RawMessage) ([][][][2]float64, er
 	}
 }
 
-// mapData renvoie la carte nationale et l'encart Ile-de-France pre-calcules.
+// mapData renvoie la carte nationale et les donnees geographiques pre-calculees.
 // La construction est faite au premier appel puis mise en cache.
-func mapData() (france, idf projectedMap, err error) {
+func mapData() (france projectedMap, features []mapFeature, err error) {
 	mapOnce.Do(buildMaps)
-	return franceMap, idfMap, mapErr
+	return franceMap, mapFeatures, mapErr
 }
 
 // mapDeptColors regroupe les couleurs a appliquer par departement pour une echeance.
@@ -193,10 +186,9 @@ type mapDeptColors struct {
 // par-dessus les remplissages, un contour bleu lumineux (halo via filtre SVG)
 // qui les fait surgir et tranche avec la palette de vigilance
 // (vert/jaune/orange/rouge), tout en restant entier quel que soit l'ordre de
-// peinture. Un encart zoome sur
-// l'Ile-de-France, dont la petite couronne est illisible a l'echelle nationale.
-func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored map[string]bool) (ht.HTML, error) {
-	france, idf, err := mapData()
+// peinture. Un encart zoome sur chacun des perimetres configures.
+func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored map[string]bool, regions []Region) (ht.HTML, error) {
+	france, features, err := mapData()
 	if err != nil {
 		return "", err
 	}
@@ -249,6 +241,21 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 			fmt.Fprintf(b, `<path class="dept-ring" d="%s"/>`, p.D)
 		}
 	}
+	type mapInset struct {
+		name    string
+		mapData projectedMap
+	}
+	var insets []mapInset
+	for _, region := range regions {
+		codes := make(map[string]bool, len(region.DepartmentCodes))
+		for _, code := range region.DepartmentCodes {
+			codes[code] = true
+		}
+		inset := projectFeatures(features, codes, insetWidth)
+		if len(inset.Paths) > 0 && inset.W > 0 {
+			insets = append(insets, mapInset{name: region.Name, mapData: inset})
+		}
+	}
 
 	var b strings.Builder
 	b.WriteString(`<div class="france-map mode-j">`)
@@ -258,8 +265,8 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 	b.WriteString(`</div>`)
 
 	// Styles par departement (fill par mode). Le toggle J / J+1 est purement
-	// CSS pour un basculement instantane. Les regles s'appliquent a la fois a
-	// la carte nationale (#dept-XX) et a l'encart IDF (#idf-XX).
+	// CSS pour un basculement instantane. Les regles s'appliquent a la carte
+	// nationale ainsi qu'a tous les encarts de perimetre.
 	b.WriteString(`<style>`)
 	b.WriteString(`.france-map .dept{fill:#e2e8e5;stroke:#1d1f1e;stroke-width:0.7;stroke-linejoin:round;transition:fill .15s}`)
 	b.WriteString(`.france-map .dept-ring{fill:none;stroke:#1a56db;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;filter:url(#fm-pop)}`)
@@ -267,29 +274,38 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 	b.WriteString(`.france-map .inset-label{font:700 15px system-ui,sans-serif;fill:#173d38}`)
 	for code, c := range todayColors {
 		fmt.Fprintf(&b, `.france-map.mode-j #dept-%s{fill:%s}`, cssIDCode(code), c.Fill)
-		if idfCodes[code] {
-			fmt.Fprintf(&b, `.france-map.mode-j #idf-%s{fill:%s}`, cssIDCode(code), c.Fill)
+		for i, inset := range insets {
+			for _, p := range inset.mapData.Paths {
+				if p.Code == code {
+					fmt.Fprintf(&b, `.france-map.mode-j #inset-%d-%s{fill:%s}`, i, cssIDCode(code), c.Fill)
+				}
+			}
 		}
 	}
 	for code, c := range tomorrowColors {
 		fmt.Fprintf(&b, `.france-map.mode-j1 #dept-%s{fill:%s}`, cssIDCode(code), c.Fill)
-		if idfCodes[code] {
-			fmt.Fprintf(&b, `.france-map.mode-j1 #idf-%s{fill:%s}`, cssIDCode(code), c.Fill)
+		for i, inset := range insets {
+			for _, p := range inset.mapData.Paths {
+				if p.Code == code {
+					fmt.Fprintf(&b, `.france-map.mode-j1 #inset-%d-%s{fill:%s}`, i, cssIDCode(code), c.Fill)
+				}
+			}
 		}
 	}
 	b.WriteString(`</style>`)
 
-	// L'encart Ile-de-France est loge dans une marge ajoutee a gauche du
-	// viewBox (au nord-ouest, dans l'Atlantique), afin de ne recouvrir aucun
-	// departement de la carte nationale.
-	hasInset := len(idf.Paths) > 0 && idf.W > 0
-	var insetW, insetH, padLeft float64
+	// Les encarts sont empiles dans une marge ajoutee a gauche du viewBox afin
+	// de ne recouvrir aucun departement de la carte nationale.
+	var padLeft, contentH float64
 	viewBox := france.VB
-	if hasInset {
-		insetW = idfWidth
-		insetH = insetW * idf.H / idf.W
-		padLeft = insetW + 40
-		viewBox = fmt.Sprintf("%.2f 0 %.2f %.2f", -padLeft, france.W+padLeft, france.H)
+	if len(insets) > 0 {
+		padLeft = insetWidth + 40
+		contentH = 40
+		for _, inset := range insets {
+			contentH += insetWidth*inset.mapData.H/inset.mapData.W + 45
+		}
+		contentH = math.Max(france.H, contentH)
+		viewBox = fmt.Sprintf("%.2f 0 %.2f %.2f", -padLeft, france.W+padLeft, contentH)
 	}
 
 	fmt.Fprintf(&b, `<svg viewBox="%s" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Carte de vigilance des departements de France metropolitaine">`, viewBox)
@@ -306,19 +322,19 @@ func renderFranceMap(todayAll, tomorrowAll map[string]vigilanceResult, monitored
 	// Overlay des contours surveilles, par-dessus tous les remplissages.
 	writeMonitored(&b, france.Paths)
 
-	// Encart Ile-de-France, place dans la marge gauche (nord-ouest, en mer)
-	// pour zoomer la petite couronne illisible a l'echelle nationale.
-	if hasInset {
+	y0 := 40.0
+	for i, inset := range insets {
+		insetH := insetWidth * inset.mapData.H / inset.mapData.W
 		x0 := -padLeft + 20
-		y0 := 40.0
-		fmt.Fprintf(&b, `<rect class="inset-bg" x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="4"/>`, x0, y0, insetW, insetH)
-		fmt.Fprintf(&b, `<text class="inset-label" x="%.2f" y="%.2f" text-anchor="middle">Île-de-France</text>`, x0+insetW/2, y0-7)
-		fmt.Fprintf(&b, `<svg x="%.2f" y="%.2f" width="%.2f" height="%.2f" viewBox="%s" preserveAspectRatio="xMidYMid meet">`, x0, y0, insetW, insetH, idf.VB)
-		for _, p := range idf.Paths {
-			writePath(&b, "idf", p)
+		fmt.Fprintf(&b, `<rect class="inset-bg" x="%.2f" y="%.2f" width="%.2f" height="%.2f" rx="4"/>`, x0, y0, insetWidth, insetH)
+		fmt.Fprintf(&b, `<text class="inset-label" x="%.2f" y="%.2f" text-anchor="middle">%s</text>`, x0+insetWidth/2, y0-7, ht.HTMLEscapeString(inset.name))
+		fmt.Fprintf(&b, `<svg x="%.2f" y="%.2f" width="%.2f" height="%.2f" viewBox="%s" preserveAspectRatio="xMidYMid meet">`, x0, y0, insetWidth, insetH, inset.mapData.VB)
+		for _, p := range inset.mapData.Paths {
+			writePath(&b, fmt.Sprintf("inset-%d", i), p)
 		}
-		writeMonitored(&b, idf.Paths)
+		writeMonitored(&b, inset.mapData.Paths)
 		b.WriteString(`</svg>`)
+		y0 += insetH + 45
 	}
 
 	b.WriteString(`</svg>`)
