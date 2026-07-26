@@ -1,4 +1,5 @@
 dist/
+.codegraph/
 go/meteo_vigilance
 *.exe
 vigilance_state.json
