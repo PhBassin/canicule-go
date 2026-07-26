@@ -75,9 +75,9 @@ func main() {
 			continue
 		}
 
-		logger.Printf("Examen de la region '%s' (Departement %s)...", region.Name, region.DepartmentCode)
+		logger.Printf("Examen de la region '%s' (Departement %s) - prevision %s...", region.Name, region.DepartmentCode, echeanceLabel(EcheanceTomorrow))
 
-		vdata, err := fetchVigilance(region.DepartmentCode)
+		vdata, err := fetchVigilance(region.DepartmentCode, EcheanceTomorrow)
 		if err != nil {
 			logger.Printf("Echec recuperation vigilance pour '%s': %v", region.Name, err)
 			errorsCount++
@@ -94,8 +94,8 @@ func main() {
 			regionMinCode = defaultMinColor
 		}
 
-		logger.Printf("Statut %s: Couleur actuelle = %s %s (Code %d) | Seuil alerte = %s (Code %d)",
-			region.Name, maxColor.Emoji, maxColor.Label, vdata.MaxColorCode,
+		logger.Printf("Statut %s (%s): Couleur prevue = %s %s (Code %d) | Seuil alerte = %s (Code %d)",
+			region.Name, echeanceLabel(vdata.Echeance), maxColor.Emoji, maxColor.Label, vdata.MaxColorCode,
 			regionMinColorStr, regionMinCode)
 
 		if vdata.MaxColorCode < regionMinCode {
