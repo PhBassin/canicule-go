@@ -16,6 +16,10 @@ import (
 type webServer struct {
 	configPath, username, password string
 	mu                             sync.Mutex
+
+	statusCacheMu sync.Mutex
+	statusCache   statusPageData
+	statusCachedAt time.Time
 }
 type pageData struct {
 	Config                            *Config
@@ -49,7 +53,7 @@ func runWebServer(address, configPath string) error {
 	s := &webServer{configPath: configPath, username: username, password: password}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.withAuth(s.handleConfig))
-	mux.HandleFunc("/etat", s.withAuth(s.handleStatus))
+	mux.HandleFunc("/etat", s.handleStatus)
 	mux.HandleFunc("/templates", s.withAuth(s.handleTemplates))
 	fmt.Printf("Interface web disponible sur http://%s\n", address)
 	return (&http.Server{Addr: address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}).ListenAndServe()
@@ -157,11 +161,26 @@ func (s *webServer) handleTemplates(w http.ResponseWriter, r *http.Request) {
 	s.render(w, data)
 }
 
+// statusCacheTTL definit la duree pendant laquelle le resultat de /etat est
+// re-servi depuis le cache memoire. La page etant publique, on absorbe ainsi
+// un trafic soutenu sans multiplier les appels a l'API Meteo-France.
+const statusCacheTTL = 60 * time.Second
+
 func (s *webServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Methode non autorisee", http.StatusMethodNotAllowed)
 		return
 	}
+
+	s.statusCacheMu.Lock()
+	if time.Since(s.statusCachedAt) < statusCacheTTL && s.statusCache.NowStr != "" {
+		cached := s.statusCache
+		s.statusCacheMu.Unlock()
+		s.renderStatus(w, cached)
+		return
+	}
+	s.statusCacheMu.Unlock()
+
 	s.mu.Lock()
 	cfg, err := loadConfig(s.configPath)
 	s.mu.Unlock()
@@ -173,7 +192,13 @@ func (s *webServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	entries := make([]statusEntry, len(cfg.Regions))
 	var wg sync.WaitGroup
 	for i, region := range cfg.Regions {
-		entries[i].Region = region
+		// Ne pas exposer les infos sensibles (destinataires, seuil d'alerte)
+		// sur cette page publique.
+		entries[i].Region = Region{
+			ID:             region.ID,
+			Name:           region.Name,
+			DepartmentCode: region.DepartmentCode,
+		}
 		if region.DepartmentCode == "" {
 			entries[i].TodayErr = "department_code manquant"
 			entries[i].TomorrowErr = "department_code manquant"
@@ -207,6 +232,12 @@ func (s *webServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.MapHTML = mapHTML
 	}
+
+	s.statusCacheMu.Lock()
+	s.statusCache = data
+	s.statusCachedAt = time.Now()
+	s.statusCacheMu.Unlock()
+
 	s.renderStatus(w, data)
 }
 
