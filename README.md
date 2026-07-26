@@ -25,7 +25,7 @@ canicule/
 
 ## Interface web et Docker
 
-L'interface web permet de modifier les reglages SMTP, les regions et les fichiers de modeles HTML sans reconstruire le binaire. Elle ne doit pas etre exposee directement sur Internet : elle donne acces au mot de passe SMTP.
+L'interface web permet de modifier les reglages SMTP, les regions et les fichiers de modeles HTML sans reconstruire le binaire. Elle est protegee par authentification HTTP Basic: les variables `CANICULE_WEB_USER` et `CANICULE_WEB_PASSWORD` sont obligatoires. Ne l'exposez pas directement sur Internet; publiez-la sur `127.0.0.1` et utilisez un proxy HTTPS ou un VPN pour un acces distant.
 
 ```bash
 # En local, depuis le dossier contenant config.json et templates/
@@ -39,10 +39,41 @@ docker run -d --name canicule -p 127.0.0.1:8080:8080 \
   -v canicule-data:/data canicule
 ```
 
-Au premier lancement, le conteneur initialise `/data/config.json` et `/data/templates/`. Le fichier de configuration et les modeles sont ensuite sauvegardes dans ce volume. Pour executer ponctuellement la surveillance dans ce meme volume :
+Ouvrez `http://127.0.0.1:8080`, puis utilisez les identifiants definis dans les variables d'environnement. La page **Configuration** enregistre les reglages SMTP, les seuils et les listes de diffusion. La page **Modeles d'e-mails** permet de selectionner et modifier les fichiers HTML; un modele invalide n'est pas sauvegarde.
+
+Au premier lancement, le conteneur initialise `/data/config.json` et `/data/templates/`. Le fichier de configuration, les modeles et `vigilance_state.json` sont ensuite conserves dans le volume `canicule-data`. Modifier les fichiers sous `/defaults` dans une nouvelle image ne remplace donc pas une configuration existante.
+
+Pour arreter, redemarrer et consulter les journaux du serveur web :
+
+```bash
+docker logs -f canicule
+docker restart canicule
+docker stop canicule
+```
+
+Pour executer ponctuellement la surveillance dans ce meme volume :
 
 ```bash
 docker run --rm -v canicule-data:/data canicule --force -c /data/config.json
+```
+
+Le mode `--dry-run` de la ligne de commande force une simulation pour cette execution. Le reglage **Simulation** de l'interface est persistant et active egalement ce mode pour les executions planifiees.
+
+Exemple de planification toutes les quinze minutes avec le planificateur de l'hote :
+
+```cron
+*/15 * * * * docker run --rm -v canicule-data:/data canicule -c /data/config.json >> /var/log/canicule.log 2>&1
+```
+
+Les options du binaire sont :
+
+```text
+-c <fichier>             chemin vers config.json (defaut: config.json)
+--dry-run                simule les envois SMTP
+--force                  envoie meme si le niveau n'a pas change
+-v                       active des journaux detailles
+--web                    lance l'interface d'administration
+--web-address <adresse>  adresse d'ecoute web (defaut: :8080)
 ```
 
 ## Build (depuis les sources)
