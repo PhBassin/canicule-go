@@ -6,13 +6,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestAdminPageRendersDepartmentControls(t *testing.T) {
 	tmpl, err := template.New("admin").Funcs(template.FuncMap{
 		"colors": func() []string { return []string{"jaune", "orange", "rouge"} },
 		"join":   func(items []string, separator string) string { return "" },
-	}).Parse(adminPage)
+	}).Parse(perimeterAdminPage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,26 +21,28 @@ func TestAdminPageRendersDepartmentControls(t *testing.T) {
 	err = tmpl.Execute(&page, pageData{Config: &Config{
 		SMTP:           SMTPConfig{Host: "smtp.example.test", Sender: "alerts@example.test"},
 		GlobalSettings: GlobalSettings{MinAlertColor: "jaune", StateFilePath: "state.json", TemplateDir: "templates"},
-		Regions:        []Region{{DepartmentCode: "75", Name: "Paris"}},
+		Regions:        []Region{{DepartmentCodes: []string{"75"}, Name: "Paris"}},
 	}, Departments: departments})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(page.Bytes(), []byte("Ajouter un departement")) {
-		t.Fatal("department add control is missing from rendered page")
+	if !bytes.Contains(page.Bytes(), []byte("Ajouter un perimetre")) {
+		t.Fatal("perimeter add control is missing from rendered page")
 	}
 }
 
 func TestUpdateConfigFromFormBuildsDepartments(t *testing.T) {
-	cfg := &Config{Regions: []Region{{DepartmentCode: "75"}}}
+	cfg := &Config{Regions: []Region{{DepartmentCodes: []string{"75"}}}}
 	form := url.Values{
-		"region_count":        {"2"},
-		"region_0_department": {"75"},
-		"region_0_color":      {"jaune"},
-		"region_0_recipients": {"paris@example.test, astreinte@example.test"},
-		"region_1_department": {"13"},
-		"region_1_color":      {"orange"},
-		"region_1_recipients": {"marseille@example.test"},
+		"region_count":         {"2"},
+		"region_0_name":        {"Ile-de-France"},
+		"region_0_departments": {"75, 77"},
+		"region_0_color":       {"jaune"},
+		"region_0_recipients":  {"paris@example.test, astreinte@example.test"},
+		"region_1_name":        {"Marseille"},
+		"region_1_departments": {"13"},
+		"region_1_color":       {"orange"},
+		"region_1_recipients":  {"marseille@example.test"},
 	}
 	req := httptest.NewRequest("POST", "/", nil)
 	req.Form = form
@@ -49,22 +52,19 @@ func TestUpdateConfigFromFormBuildsDepartments(t *testing.T) {
 	if len(cfg.Regions) != 2 {
 		t.Fatalf("got %d regions, want 2", len(cfg.Regions))
 	}
-	if cfg.Regions[0].Name != "Paris" || cfg.Regions[0].ID != "75" {
-		t.Fatalf("unexpected Paris region: %#v", cfg.Regions[0])
+	if cfg.Regions[0].Name != "Ile-de-France" || len(cfg.Regions[0].DepartmentCodes) != 2 {
+		t.Fatalf("unexpected Ile-de-France perimeter: %#v", cfg.Regions[0])
 	}
-	if cfg.Regions[1].Name != "Bouches-du-Rhone" || cfg.Regions[1].MinAlertColor != "orange" {
+	if cfg.Regions[1].Name != "Marseille" || cfg.Regions[1].MinAlertColor != "orange" {
 		t.Fatalf("unexpected Marseille region: %#v", cfg.Regions[1])
 	}
 }
 
-func TestValidateConfigRejectsDuplicateDepartment(t *testing.T) {
+func TestValidateConfigRejectsDuplicateDepartmentWithinPerimeter(t *testing.T) {
 	cfg := &Config{
 		SMTP:           SMTPConfig{Host: "smtp.example.test", Sender: "alerts@example.test"},
 		GlobalSettings: GlobalSettings{MinAlertColor: "jaune", StateFilePath: "state.json", TemplateDir: "templates"},
-		Regions: []Region{
-			{Name: "Paris", DepartmentCode: "75"},
-			{Name: "Paris", DepartmentCode: "75"},
-		},
+		Regions:        []Region{{Name: "Ile-de-France", DepartmentCodes: []string{"75", "75"}}},
 	}
 
 	if err := validateConfig(cfg); err == nil {
@@ -89,5 +89,62 @@ func TestRenderSubjectRemovesLineBreaks(t *testing.T) {
 	}
 	if subject != "Alert Paris" {
 		t.Fatalf("got %q", subject)
+	}
+}
+
+func TestLastScheduledRefresh(t *testing.T) {
+	loc := time.UTC
+	day := func(h, m int) time.Time { return time.Date(2026, 7, 26, h, m, 0, 0, loc) }
+	interval := 12 * time.Hour // creneaux: 06:00 et 18:00
+
+	cases := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{"apres le creneau du matin", day(10, 0), day(6, 0)},
+		{"pile sur un creneau", day(18, 0), day(18, 0)},
+		{"apres le creneau du soir", day(18, 30), day(18, 0)},
+		{"avant le premier creneau du jour", day(5, 0), time.Date(2026, 7, 25, 18, 0, 0, 0, loc)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := lastScheduledRefresh(c.now, 6, 0, interval)
+			if !got.Equal(c.want) {
+				t.Fatalf("lastScheduledRefresh(%v) = %v, want %v", c.now, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRefreshScheduleDefaults(t *testing.T) {
+	h, m, interval := refreshSchedule(GlobalSettings{})
+	if h != 6 || m != 0 || interval != 12*time.Hour {
+		t.Fatalf("defauts = %02d:%02d/%v, want 06:00/12h", h, m, interval)
+	}
+	h, m, interval = refreshSchedule(GlobalSettings{RefreshStart: "08:30", RefreshIntervalHours: 6})
+	if h != 8 || m != 30 || interval != 6*time.Hour {
+		t.Fatalf("configures = %02d:%02d/%v, want 08:30/6h", h, m, interval)
+	}
+}
+
+func TestRenderFranceMapIncludesOneInsetPerPerimeter(t *testing.T) {
+	regions := []Region{
+		{Name: "Ile-de-France", DepartmentCodes: []string{"75", "77"}},
+		{Name: "Rennes - Nantes", DepartmentCodes: []string{"35", "44"}},
+		{Name: "Lyon", DepartmentCodes: []string{"69", "38"}},
+	}
+	mapHTML, err := renderFranceMap(nil, nil, map[string]bool{"75": true, "35": true, "69": true}, regions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(mapHTML)
+	for _, name := range []string{"Ile-de-France", "Rennes - Nantes", "Lyon"} {
+		if !bytes.Contains([]byte(page), []byte(name)) {
+			t.Fatalf("missing inset title %q", name)
+		}
+	}
+	if got := bytes.Count([]byte(page), []byte(`class="inset-bg"`)); got != len(regions) {
+		t.Fatalf("got %d insets, want %d", got, len(regions))
 	}
 }

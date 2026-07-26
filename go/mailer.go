@@ -24,6 +24,9 @@ type templateData struct {
 	Recipients      string
 	PhenomenaText   string
 	PhenomenaHTML   ht.HTML
+	Echeance        string
+	EcheanceLabel   string
+	ValidityStr     string
 }
 
 type mailer struct {
@@ -83,7 +86,11 @@ func (m *mailer) sendAlert(region Region, vd *VigilanceData) bool {
 }
 
 func defaultSubject(data templateData) string {
-	return data.ColorEmoji + " [ALERTE METEO] Vigilance " + data.ColorLabelUpper + " - " + data.RegionName
+	prefix := "[ALERTE METEO]"
+	if data.Echeance == EcheanceTomorrow {
+		prefix = "[PREVISION METEO J+1]"
+	}
+	return data.ColorEmoji + " " + prefix + " Vigilance " + data.ColorLabelUpper + " - " + data.RegionName
 }
 
 func renderSubject(subjectTemplate string, data templateData) (string, error) {
@@ -113,6 +120,9 @@ func (m *mailer) buildTemplateData(region Region, vd *VigilanceData) templateDat
 		RegionName:      region.Name,
 		UpdateStr:       formatTimestamp(vd.UpdateTime),
 		Recipients:      strings.Join(region.DistList, ", "),
+		Echeance:        vd.Echeance,
+		EcheanceLabel:   echeanceLabel(vd.Echeance),
+		ValidityStr:     formatTimestamp(vd.EndValidity),
 	}
 
 	var txtLines, htmlItems []string
@@ -177,7 +187,7 @@ ul.plist{padding-left:20px;margin:0}
 <div class="header"><h1>%s Vigilance %s</h1></div>
 <div class="content">
 <h2>Surveillance Meteo France - %s</h2>
-<div class="meta"><strong>Statut global :</strong> %s<br><strong>Derniere mise a jour :</strong> %s</div>
+<div class="meta"><strong>Echeance :</strong> %s<br><strong>Statut global :</strong> %s<br><strong>Derniere mise a jour :</strong> %s<br><strong>Fin de validite :</strong> %s</div>
 <div class="phtitle">Evaluation des phenomenes :</div>
 <ul class="plist">%s</ul>
 <div style="text-align:center;margin-top:25px"><a href="https://vigilance.meteofrance.fr/fr" class="btn">Consulter la carte Meteo France</a></div>
@@ -187,7 +197,7 @@ ul.plist{padding-left:20px;margin:0}
 </body></html>`,
 		data.ColorHex, data.ColorHex,
 		data.ColorEmoji, data.ColorNameUpper,
-		data.RegionName, data.ColorLabel, data.UpdateStr,
+		data.RegionName, data.EcheanceLabel, data.ColorLabel, data.UpdateStr, data.ValidityStr,
 		string(data.PhenomenaHTML), data.Recipients)
 }
 

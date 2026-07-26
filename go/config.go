@@ -25,12 +25,21 @@ type GlobalSettings struct {
 	StateFilePath      string `json:"state_file_path"`
 	TemplateDir        string `json:"template_dir"`
 	SubjectTemplate    string `json:"subject_template"`
+	// RefreshStart est l'heure de depart (format "HH:MM") du rafraichissement
+	// de la carte de vigilance. Vide => valeur par defaut (06:00).
+	RefreshStart string `json:"refresh_start"`
+	// RefreshIntervalHours est l'intervalle, en heures, entre deux
+	// rafraichissements de la carte. 0 => valeur par defaut (12 h).
+	RefreshIntervalHours int `json:"refresh_interval_hours"`
 }
 
 type Region struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	DepartmentCode string   `json:"department_code"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	DepartmentCodes []string `json:"department_codes"`
+	// DepartmentCode is retained only to read configurations written before
+	// perimeters could contain more than one department.
+	DepartmentCode string   `json:"department_code,omitempty"`
 	MinAlertColor  string   `json:"min_alert_color"`
 	DistList       []string `json:"distribution_list"`
 }
@@ -50,6 +59,12 @@ func loadConfig(path string) (*Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("fichier JSON invalide (%s): %w", path, err)
+	}
+	for i := range cfg.Regions {
+		if len(cfg.Regions[i].DepartmentCodes) == 0 && cfg.Regions[i].DepartmentCode != "" {
+			cfg.Regions[i].DepartmentCodes = []string{cfg.Regions[i].DepartmentCode}
+		}
+		cfg.Regions[i].DepartmentCode = ""
 	}
 	return &cfg, nil
 }

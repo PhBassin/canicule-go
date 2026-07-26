@@ -39,7 +39,7 @@ docker run -d --name canicule -p 127.0.0.1:8080:8080 \
   -v canicule-data:/data canicule
 ```
 
-Ouvrez `http://127.0.0.1:8080`, puis utilisez les identifiants definis dans les variables d'environnement. La page **Configuration** enregistre les reglages SMTP, les seuils et les listes de diffusion. La page **Modeles d'e-mails** permet de selectionner et modifier les fichiers HTML; un modele invalide n'est pas sauvegarde.
+Ouvrez `http://127.0.0.1:8080` : la page d'accueil (`/`) affiche publiquement la **carte de vigilance** de la France (J / J+1). Les pages d'administration sont protegees par authentification et utilisent les identifiants definis dans les variables d'environnement. La page **Configuration** (`/config`) enregistre les reglages SMTP, les seuils et les listes de diffusion. La page **Modeles d'e-mails** (`/templates`) permet de selectionner et modifier les fichiers HTML; un modele invalide n'est pas sauvegarde.
 
 Au premier lancement, le conteneur initialise `/data/config.json` et `/data/templates/`. Le fichier de configuration, les modeles et `vigilance_state.json` sont ensuite conserves dans le volume `canicule-data`. Modifier les fichiers sous `/defaults` dans une nouvelle image ne remplace donc pas une configuration existante.
 

@@ -24,42 +24,25 @@
   },
   "regions": [
     {
-      "id": "75",
-      "name": "Paris (75)",
-      "department_code": "75",
+      "id": "idf",
+      "name": "Ile-de-France",
+      "department_codes": ["75", "77", "78", "91", "92", "93", "94", "95"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-paris@entreprise.com",
-        "hseh-idf@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-idf@entreprise.com"]
     },
     {
-      "id": "13",
-      "name": "Bouches-du-Rhône (13)",
-      "department_code": "13",
-      "min_alert_color": "orange",
-      "distribution_list": [
-        "astreinte-sud@entreprise.com",
-        "site-marseille@entreprise.com"
-      ]
-    },
-    {
-      "id": "69",
-      "name": "Rhône (69)",
-      "department_code": "69",
+      "id": "ouest",
+      "name": "Rennes - Nantes",
+      "department_codes": ["35", "44", "49", "56"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-lyon@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-nantes@entreprise.com"]
     },
     {
-      "id": "33",
-      "name": "Gironde (33)",
-      "department_code": "33",
-      "min_alert_color": "orange",
-      "distribution_list": [
-        "astreinte-bordeaux@entreprise.com"
-      ]
+      "id": "lyon",
+      "name": "Lyon",
+      "department_codes": ["01", "26", "38", "42", "69"],
+      "min_alert_color": "jaune",
+      "distribution_list": ["astreinte-lyon@entreprise.com"]
     }
   ]
 }
