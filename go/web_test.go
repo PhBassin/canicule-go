@@ -13,7 +13,7 @@ func TestAdminPageRendersDepartmentControls(t *testing.T) {
 	tmpl, err := template.New("admin").Funcs(template.FuncMap{
 		"colors": func() []string { return []string{"jaune", "orange", "rouge"} },
 		"join":   func(items []string, separator string) string { return "" },
-	}).Parse(adminPage)
+	}).Parse(perimeterAdminPage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,26 +21,28 @@ func TestAdminPageRendersDepartmentControls(t *testing.T) {
 	err = tmpl.Execute(&page, pageData{Config: &Config{
 		SMTP:           SMTPConfig{Host: "smtp.example.test", Sender: "alerts@example.test"},
 		GlobalSettings: GlobalSettings{MinAlertColor: "jaune", StateFilePath: "state.json", TemplateDir: "templates"},
-		Regions:        []Region{{DepartmentCode: "75", Name: "Paris"}},
+		Regions:        []Region{{DepartmentCodes: []string{"75"}, Name: "Paris"}},
 	}, Departments: departments})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(page.Bytes(), []byte("Ajouter un departement")) {
-		t.Fatal("department add control is missing from rendered page")
+	if !bytes.Contains(page.Bytes(), []byte("Ajouter un perimetre")) {
+		t.Fatal("perimeter add control is missing from rendered page")
 	}
 }
 
 func TestUpdateConfigFromFormBuildsDepartments(t *testing.T) {
-	cfg := &Config{Regions: []Region{{DepartmentCode: "75"}}}
+	cfg := &Config{Regions: []Region{{DepartmentCodes: []string{"75"}}}}
 	form := url.Values{
-		"region_count":        {"2"},
-		"region_0_department": {"75"},
-		"region_0_color":      {"jaune"},
-		"region_0_recipients": {"paris@example.test, astreinte@example.test"},
-		"region_1_department": {"13"},
-		"region_1_color":      {"orange"},
-		"region_1_recipients": {"marseille@example.test"},
+		"region_count":         {"2"},
+		"region_0_name":        {"Ile-de-France"},
+		"region_0_departments": {"75, 77"},
+		"region_0_color":       {"jaune"},
+		"region_0_recipients":  {"paris@example.test, astreinte@example.test"},
+		"region_1_name":        {"Marseille"},
+		"region_1_departments": {"13"},
+		"region_1_color":       {"orange"},
+		"region_1_recipients":  {"marseille@example.test"},
 	}
 	req := httptest.NewRequest("POST", "/", nil)
 	req.Form = form
@@ -50,22 +52,19 @@ func TestUpdateConfigFromFormBuildsDepartments(t *testing.T) {
 	if len(cfg.Regions) != 2 {
 		t.Fatalf("got %d regions, want 2", len(cfg.Regions))
 	}
-	if cfg.Regions[0].Name != "Paris" || cfg.Regions[0].ID != "75" {
-		t.Fatalf("unexpected Paris region: %#v", cfg.Regions[0])
+	if cfg.Regions[0].Name != "Ile-de-France" || len(cfg.Regions[0].DepartmentCodes) != 2 {
+		t.Fatalf("unexpected Ile-de-France perimeter: %#v", cfg.Regions[0])
 	}
-	if cfg.Regions[1].Name != "Bouches-du-Rhone" || cfg.Regions[1].MinAlertColor != "orange" {
+	if cfg.Regions[1].Name != "Marseille" || cfg.Regions[1].MinAlertColor != "orange" {
 		t.Fatalf("unexpected Marseille region: %#v", cfg.Regions[1])
 	}
 }
 
-func TestValidateConfigRejectsDuplicateDepartment(t *testing.T) {
+func TestValidateConfigRejectsDuplicateDepartmentWithinPerimeter(t *testing.T) {
 	cfg := &Config{
 		SMTP:           SMTPConfig{Host: "smtp.example.test", Sender: "alerts@example.test"},
 		GlobalSettings: GlobalSettings{MinAlertColor: "jaune", StateFilePath: "state.json", TemplateDir: "templates"},
-		Regions: []Region{
-			{Name: "Paris", DepartmentCode: "75"},
-			{Name: "Paris", DepartmentCode: "75"},
-		},
+		Regions:        []Region{{Name: "Ile-de-France", DepartmentCodes: []string{"75", "75"}}},
 	}
 
 	if err := validateConfig(cfg); err == nil {

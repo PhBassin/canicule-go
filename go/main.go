@@ -69,68 +69,54 @@ func main() {
 	errorsCount := 0
 
 	for _, region := range config.Regions {
-		if region.DepartmentCode == "" {
-			logger.Printf("Region '%s' sans department_code. Ignoree.", region.Name)
+		if len(region.DepartmentCodes) == 0 {
+			logger.Printf("Perimetre '%s' sans departement. Ignore.", region.Name)
 			errorsCount++
 			continue
 		}
 
-		logger.Printf("Examen de la region '%s' (Departement %s) - prevision %s...", region.Name, region.DepartmentCode, echeanceLabel(EcheanceTomorrow))
-
-		vdata, err := fetchVigilance(region.DepartmentCode, EcheanceTomorrow)
-		if err != nil {
-			logger.Printf("Echec recuperation vigilance pour '%s': %v", region.Name, err)
-			errorsCount++
-			continue
-		}
-
-		maxColor := vdata.MaxColorInfo
-		regionMinColorStr := region.MinAlertColor
-		if regionMinColorStr == "" {
-			regionMinColorStr = gs.MinAlertColor
-		}
-		regionMinCode := colorNameToCode(regionMinColorStr)
-		if regionMinCode == 0 {
-			regionMinCode = defaultMinColor
-		}
-
-		logger.Printf("Statut %s (%s): Couleur prevue = %s %s (Code %d) | Seuil alerte = %s (Code %d)",
-			region.Name, echeanceLabel(vdata.Echeance), maxColor.Emoji, maxColor.Label, vdata.MaxColorCode,
-			regionMinColorStr, regionMinCode)
-
-		if vdata.MaxColorCode < regionMinCode {
-			logger.Printf("-> Niveau sous le seuil d'alerte (%s). Pas d'envoi.", regionMinColorStr)
-			currentState[region.DepartmentCode] = DeptState{
-				MaxColorCode: vdata.MaxColorCode,
-				UpdateTime:   vdata.UpdateTime,
-				LastCheck:    nowISO(),
+		for _, departmentCode := range region.DepartmentCodes {
+			logger.Printf("Examen du perimetre '%s' (Departement %s) - prevision %s...", region.Name, departmentCode, echeanceLabel(EcheanceTomorrow))
+			vdata, err := fetchVigilance(departmentCode, EcheanceTomorrow)
+			if err != nil {
+				logger.Printf("Echec recuperation vigilance pour '%s' (%s): %v", region.Name, departmentCode, err)
+				errorsCount++
+				continue
 			}
-			continue
-		}
-
-		lastState := prevState[region.DepartmentCode]
-		hasChanged := vdata.MaxColorCode != lastState.MaxColorCode
-
-		if onlyNotifyOnChange && !hasChanged && !*force {
-			logger.Printf("-> Vigilance inchangee (%s). Notification ignoree (anti-spam).", maxColor.Name)
-			s := currentState[region.DepartmentCode]
-			s.LastCheck = nowISO()
-			currentState[region.DepartmentCode] = s
-			continue
-		}
-
-		logger.Printf("-> Declenchement de la notification email pour %s !", region.Name)
-		sentOK := mailer.sendAlert(region, vdata)
-		if sentOK {
-			notificationsSent++
-			currentState[region.DepartmentCode] = DeptState{
-				MaxColorCode:     vdata.MaxColorCode,
-				LastNotification: nowISO(),
-				UpdateTime:       vdata.UpdateTime,
-				LastCheck:        nowISO(),
+			maxColor := vdata.MaxColorInfo
+			regionMinColorStr := region.MinAlertColor
+			if regionMinColorStr == "" {
+				regionMinColorStr = gs.MinAlertColor
 			}
-		} else {
-			errorsCount++
+			regionMinCode := colorNameToCode(regionMinColorStr)
+			if regionMinCode == 0 {
+				regionMinCode = defaultMinColor
+			}
+			logger.Printf("Statut %s / %s (%s): Couleur prevue = %s %s (Code %d) | Seuil alerte = %s (Code %d)", region.Name, departmentCode, echeanceLabel(vdata.Echeance), maxColor.Emoji, maxColor.Label, vdata.MaxColorCode, regionMinColorStr, regionMinCode)
+			if vdata.MaxColorCode < regionMinCode {
+				logger.Printf("-> Niveau sous le seuil d'alerte (%s). Pas d'envoi.", regionMinColorStr)
+				currentState[departmentCode] = DeptState{MaxColorCode: vdata.MaxColorCode, UpdateTime: vdata.UpdateTime, LastCheck: nowISO()}
+				continue
+			}
+			lastState := prevState[departmentCode]
+			if onlyNotifyOnChange && vdata.MaxColorCode == lastState.MaxColorCode && !*force {
+				logger.Printf("-> Vigilance inchangee (%s). Notification ignoree (anti-spam).", maxColor.Name)
+				s := currentState[departmentCode]
+				s.LastCheck = nowISO()
+				currentState[departmentCode] = s
+				continue
+			}
+			logger.Printf("-> Declenchement de la notification email pour %s / %s !", region.Name, departmentCode)
+			notificationRegion := region
+			if department, ok := departmentByCode(departmentCode); ok {
+				notificationRegion.Name = fmt.Sprintf("%s - %s (%s)", region.Name, department.Name, departmentCode)
+			}
+			if mailer.sendAlert(notificationRegion, vdata) {
+				notificationsSent++
+				currentState[departmentCode] = DeptState{MaxColorCode: vdata.MaxColorCode, LastNotification: nowISO(), UpdateTime: vdata.UpdateTime, LastCheck: nowISO()}
+			} else {
+				errorsCount++
+			}
 		}
 	}
 

@@ -24,104 +24,32 @@
   },
   "regions": [
     {
-      "id": "75",
-      "name": "Paris (75)",
-      "department_code": "75",
+      "id": "idf",
+      "name": "Ile-de-France",
+      "department_codes": ["75", "77", "78", "91", "92", "93", "94", "95"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-paris@entreprise.com",
-        "hseh-idf@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-idf@entreprise.com"]
     },
     {
-      "id": "77",
-      "name": "Seine-et-Marne (77)",
-      "department_code": "77",
+      "id": "rennes",
+      "name": "Rennes - Bretagne",
+      "department_codes": ["22", "29", "35", "56"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-rennes@entreprise.com"]
     },
     {
-      "id": "78",
-      "name": "Yvelines (78)",
-      "department_code": "78",
+      "id": "nantes",
+      "name": "Nantes - Pays de la Loire",
+      "department_codes": ["44", "49", "53", "72", "85"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-nantes@entreprise.com"]
     },
     {
-      "id": "91",
-      "name": "Essonne (91)",
-      "department_code": "91",
+      "id": "lyon",
+      "name": "Lyon - Auvergne-Rhone-Alpes",
+      "department_codes": ["01", "03", "07", "15", "26", "38", "42", "43", "63", "69", "73", "74"],
       "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
-    },
-    {
-      "id": "92",
-      "name": "Hauts-de-Seine (92)",
-      "department_code": "92",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
-    },
-    {
-      "id": "93",
-      "name": "Seine-Saint-Denis (93)",
-      "department_code": "93",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
-    },
-    {
-      "id": "94",
-      "name": "Val-de-Marne (94)",
-      "department_code": "94",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
-    },
-    {
-      "id": "95",
-      "name": "Val-d'Oise (95)",
-      "department_code": "95",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-idf@entreprise.com"
-      ]
-    },
-    {
-      "id": "44",
-      "name": "Loire-Atlantique (44)",
-      "department_code": "44",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-nantes@entreprise.com"
-      ]
-    },
-    {
-      "id": "56",
-      "name": "Morbihan (56)",
-      "department_code": "56",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-vannes@entreprise.com"
-      ]
-    },
-    {
-      "id": "69",
-      "name": "Rhône (69)",
-      "department_code": "69",
-      "min_alert_color": "jaune",
-      "distribution_list": [
-        "astreinte-lyon@entreprise.com"
-      ]
+      "distribution_list": ["astreinte-lyon@entreprise.com"]
     }
   ]
 }

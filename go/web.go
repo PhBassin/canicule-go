@@ -307,40 +307,34 @@ func (s *webServer) refreshVigilance() (today, tomorrow map[string]vigilanceResu
 // vigilances; les departements surveilles (config courante) sont mis en
 // evidence et les fiches detaillees ne concernent qu'eux.
 func buildStatusData(cfg *Config, todayAll, tomorrowAll map[string]vigilanceResult) statusPageData {
-	monitored := make(map[string]bool, len(cfg.Regions))
-	entries := make([]statusEntry, len(cfg.Regions))
-	for i, region := range cfg.Regions {
-		// Ne pas exposer les infos sensibles (destinataires, seuil d'alerte)
-		// sur cette page publique.
-		entries[i].Region = Region{
-			ID:             region.ID,
-			Name:           region.Name,
-			DepartmentCode: region.DepartmentCode,
-		}
-		code := region.DepartmentCode
-		if code == "" {
-			entries[i].TodayErr = "department_code manquant"
-			entries[i].TomorrowErr = "department_code manquant"
-			continue
-		}
-		monitored[code] = true
-		if r, ok := todayAll[code]; ok {
-			if r.Err != nil {
-				entries[i].TodayErr = r.Err.Error()
-			} else {
-				entries[i].Today = r.Data
+	monitored := make(map[string]bool)
+	var entries []statusEntry
+	for _, region := range cfg.Regions {
+		for _, code := range region.DepartmentCodes {
+			entry := statusEntry{Region: Region{ID: region.ID, Name: region.Name, DepartmentCode: code, DepartmentCodes: []string{code}}}
+			if department, ok := departmentByCode(code); ok {
+				entry.Region.Name = fmt.Sprintf("%s - %s (%s)", region.Name, department.Name, code)
 			}
-		} else {
-			entries[i].TodayErr = "departement inconnu"
-		}
-		if r, ok := tomorrowAll[code]; ok {
-			if r.Err != nil {
-				entries[i].TomorrowErr = r.Err.Error()
+			monitored[code] = true
+			if r, ok := todayAll[code]; ok {
+				if r.Err != nil {
+					entry.TodayErr = r.Err.Error()
+				} else {
+					entry.Today = r.Data
+				}
 			} else {
-				entries[i].Tomorrow = r.Data
+				entry.TodayErr = "departement inconnu"
 			}
-		} else {
-			entries[i].TomorrowErr = "departement inconnu"
+			if r, ok := tomorrowAll[code]; ok {
+				if r.Err != nil {
+					entry.TomorrowErr = r.Err.Error()
+				} else {
+					entry.Tomorrow = r.Data
+				}
+			} else {
+				entry.TomorrowErr = "departement inconnu"
+			}
+			entries = append(entries, entry)
 		}
 	}
 
@@ -379,10 +373,9 @@ func (s *webServer) runStatusRefresher() {
 	}
 }
 
-
 func (s *webServer) render(w http.ResponseWriter, data pageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	tmpl, err := template.New("admin").Funcs(template.FuncMap{"colors": func() []string { return []string{"jaune", "orange", "rouge"} }, "join": strings.Join}).Parse(adminPage)
+	tmpl, err := template.New("admin").Funcs(template.FuncMap{"colors": func() []string { return []string{"jaune", "orange", "rouge"} }, "join": strings.Join}).Parse(perimeterAdminPage)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -420,12 +413,15 @@ func updateConfigFromForm(cfg *Config, r *http.Request) {
 		if r.FormValue(prefix+"remove") != "" {
 			continue
 		}
-		code := r.FormValue(prefix + "department")
-		department, ok := departmentByCode(code)
-		if !ok {
+		codes := recipients(r.FormValue(prefix + "departments"))
+		if len(codes) == 0 {
 			continue
 		}
-		cfg.Regions = append(cfg.Regions, Region{ID: code, Name: department.Name, DepartmentCode: code, MinAlertColor: r.FormValue(prefix + "color"), DistList: recipients(r.FormValue(prefix + "recipients"))})
+		name := strings.TrimSpace(r.FormValue(prefix + "name"))
+		if name == "" {
+			name = codes[0]
+		}
+		cfg.Regions = append(cfg.Regions, Region{ID: strings.ToLower(strings.ReplaceAll(name, " ", "-")), Name: name, DepartmentCodes: codes, MinAlertColor: r.FormValue(prefix + "color"), DistList: recipients(r.FormValue(prefix + "recipients"))})
 	}
 }
 func recipients(value string) []string {
@@ -473,13 +469,18 @@ func validateConfig(cfg *Config) error {
 	}
 	seen := make(map[string]bool)
 	for _, region := range cfg.Regions {
-		if _, ok := departmentByCode(region.DepartmentCode); !ok {
-			return fmt.Errorf("Departement invalide: %s.", region.DepartmentCode)
+		if region.Name == "" || len(region.DepartmentCodes) == 0 {
+			return fmt.Errorf("Chaque perimetre doit avoir un nom et au moins un departement.")
 		}
-		if seen[region.DepartmentCode] {
-			return fmt.Errorf("Le departement %s est configure plusieurs fois.", region.DepartmentCode)
+		for _, code := range region.DepartmentCodes {
+			if _, ok := departmentByCode(code); !ok {
+				return fmt.Errorf("Departement invalide: %s.", code)
+			}
+			if seen[code] {
+				return fmt.Errorf("Le departement %s est configure plusieurs fois.", code)
+			}
+			seen[code] = true
 		}
-		seen[region.DepartmentCode] = true
 		if region.MinAlertColor != "" && colorNameToCode(region.MinAlertColor) == 0 {
 			return fmt.Errorf("Couleur invalide pour %s.", region.Name)
 		}

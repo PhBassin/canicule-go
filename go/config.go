@@ -34,9 +34,12 @@ type GlobalSettings struct {
 }
 
 type Region struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	DepartmentCode string   `json:"department_code"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	DepartmentCodes []string `json:"department_codes"`
+	// DepartmentCode is retained only to read configurations written before
+	// perimeters could contain more than one department.
+	DepartmentCode string   `json:"department_code,omitempty"`
 	MinAlertColor  string   `json:"min_alert_color"`
 	DistList       []string `json:"distribution_list"`
 }
@@ -56,6 +59,12 @@ func loadConfig(path string) (*Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("fichier JSON invalide (%s): %w", path, err)
+	}
+	for i := range cfg.Regions {
+		if len(cfg.Regions[i].DepartmentCodes) == 0 && cfg.Regions[i].DepartmentCode != "" {
+			cfg.Regions[i].DepartmentCodes = []string{cfg.Regions[i].DepartmentCode}
+		}
+		cfg.Regions[i].DepartmentCode = ""
 	}
 	return &cfg, nil
 }
