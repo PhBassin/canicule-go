@@ -1,0 +1,65 @@
+{
+  "smtp": {
+    "host": "smtp.entreprise.com",
+    "port": 587,
+    "use_tls": true,
+    "use_ssl": false,
+    "username": "alertes-meteo@entreprise.com",
+    "password": "VOTRE_MOT_DE_PASSE_SMTP",
+    "sender_email": "alertes-meteo@entreprise.com",
+    "sender_name": "Surveillance Météo France",
+    "dry_run": true
+  },
+  "global_settings": {
+    "min_alert_color": "jaune",
+    "only_notify_on_change": true,
+    "state_file_path": "vigilance_state.json",
+    "template_dir": "templates"
+  },
+  "logging": {
+    "level": "INFO",
+    "log_file": "vigilance_activity.log",
+    "max_bytes": 5242880,
+    "backup_count": 5
+  },
+  "regions": [
+    {
+      "id": "75",
+      "name": "Paris (75)",
+      "department_code": "75",
+      "min_alert_color": "jaune",
+      "distribution_list": [
+        "astreinte-paris@entreprise.com",
+        "hseh-idf@entreprise.com"
+      ]
+    },
+    {
+      "id": "13",
+      "name": "Bouches-du-Rhône (13)",
+      "department_code": "13",
+      "min_alert_color": "orange",
+      "distribution_list": [
+        "astreinte-sud@entreprise.com",
+        "site-marseille@entreprise.com"
+      ]
+    },
+    {
+      "id": "69",
+      "name": "Rhône (69)",
+      "department_code": "69",
+      "min_alert_color": "jaune",
+      "distribution_list": [
+        "astreinte-lyon@entreprise.com"
+      ]
+    },
+    {
+      "id": "33",
+      "name": "Gironde (33)",
+      "department_code": "33",
+      "min_alert_color": "orange",
+      "distribution_list": [
+        "astreinte-bordeaux@entreprise.com"
+      ]
+    }
+  ]
+}

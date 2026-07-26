@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+    .card { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 16px rgba(255,140,0,0.15); }
+    .header { background: linear-gradient(135deg, {{.ColorHex}}, #ff6b00); color: #ffffff; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
+    .header .subtitle { font-size: 13px; opacity: 0.9; margin-top: 6px; }
+    .content { padding: 28px; }
+    .banner { background: #fff3e0; border: 1px solid #ffcc80; border-radius: 6px; padding: 16px; margin-bottom: 20px; text-align: center; }
+    .banner .icon { font-size: 32px; }
+    .banner .msg { font-size: 15px; font-weight: 600; color: #e65100; margin-top: 8px; }
+    .meta-info { background: #f8f9fa; border-left: 4px solid {{.ColorHex}}; padding: 12px 15px; margin-bottom: 20px; font-size: 14px; color: #555; }
+    .phenomena-title { font-size: 16px; font-weight: 600; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    ul.phenomena-list { padding-left: 20px; margin: 0; }
+    .safety-box { background: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin-top: 20px; }
+    .safety-box h3 { margin: 0 0 10px 0; color: #e65100; font-size: 15px; }
+    .safety-box ul { margin: 0; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.7; }
+    .footer { background: #f1f3f5; padding: 15px; text-align: center; font-size: 12px; color: #6c757d; border-top: 1px solid #e9ecef; }
+    .btn { display: inline-block; background-color: #e65100; color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 4px; font-weight: bold; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>{{.ColorEmoji}} Alerte Orange</h1>
+      <div class="subtitle">Phenomenes dangereux de forte intensite</div>
+    </div>
+    <div class="content">
+      <div class="banner">
+        <div class="icon">{{.ColorEmoji}}</div>
+        <div class="msg">SOYEZ TRES VIGILANT - Des phenomenes meteorologiques dangereux sont prevus</div>
+      </div>
+
+      <h2>Surveillance Meteo France - {{.RegionName}}</h2>
+      <div class="meta-info">
+        <strong>Statut global :</strong> {{.ColorLabel}}<br>
+        <strong>Derniere mise a jour :</strong> {{.UpdateStr}}
+      </div>
+
+      <div class="phenomena-title">Evaluation des phenomenes :</div>
+      <ul class="phenomena-list">
+        {{.PhenomenaHTML}}
+      </ul>
+
+      <div class="safety-box">
+        <h3>{{.ColorEmoji}} Consignes de securite</h3>
+        <ul>
+          <li>Ne prenez pas de risques inutiles dans vos deplacements.</li>
+          <li>Mettez a l'abri les objets sensibles au vent.</li>
+          <li>Evitez les sorties en montagne, en foret ou en bord de mer.</li>
+          <li>Anticipez les eventuelles coupures d'electricite.</li>
+          <li>Suivez les consignes des autorites locales.</li>
+        </ul>
+      </div>
+
+      <div style="text-align: center; margin-top: 25px;">
+        <a href="https://vigilance.meteofrance.fr/fr" class="btn" target="_blank">{{.ColorEmoji}} Consulter la carte Meteo France</a>
+      </div>
+    </div>
+    <div class="footer">
+      Alerte automatique - Liste de diffusion : {{.Recipients}}
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+dist/
+*.exe
+vigilance_state.json
+vigilance_activity.log
+.vscode/
+.idea/
+.DS_Store
